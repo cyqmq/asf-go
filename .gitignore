@@ -1,0 +1,4 @@
+*.test
+*.out
+asf-go.log
+config/
