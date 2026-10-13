@@ -151,3 +151,29 @@ func TestCheckAccess(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckAccessBlacklist(t *testing.T) {
+	cfg := config.DefaultBotConfig()
+	cfg.SteamUserPermissions = map[string]config.Access{"76561198000000001": config.AccessMaster}
+	b := &Bot{Name: "testbot", Config: cfg, OwnerSteamID: 76561198000000000, Blacklist: []uint64{76561198000000001}}
+
+	if b.checkAccess(76561198000000001, config.AccessMaster) {
+		t.Error("黑名单用户即使有 Master 权限也应被拒绝")
+	}
+}
+
+func TestPointsBalanceValidation(t *testing.T) {
+	t.Run("未登录", func(t *testing.T) {
+		b := &Bot{Name: "testbot", SteamAPIKey: "key"}
+		if _, err := b.PointsBalance(); err == nil {
+			t.Error("未登录时应返回错误")
+		}
+	})
+
+	t.Run("未配置 API Key", func(t *testing.T) {
+		b := &Bot{Name: "testbot"}
+		if _, err := b.PointsBalance(); err == nil {
+			t.Error("未配置 SteamWebApiKey 时应返回错误")
+		}
+	})
+}

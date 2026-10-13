@@ -18,6 +18,7 @@ import (
 	"github.com/asf-go/asf/internal/steam"
 	"github.com/asf-go/asf/internal/store"
 	"github.com/asf-go/asf/internal/trading"
+	"github.com/asf-go/asf/internal/web"
 )
 
 // Bot 对应 ASF 的 Bot 对象，表示一个独立的 Steam 账号机器人。
@@ -31,6 +32,7 @@ type Bot struct {
 	OwnerSteamID uint64
 	ASFVersion   string
 	OnExit       func()
+	Blacklist    []uint64
 
 	configDir   string
 	loginKey    string
@@ -572,6 +574,28 @@ func (b *Bot) Redeem(keys []string) (string, error) {
 	return strings.Join(lines, "; "), nil
 }
 
+// PointsBalance 查询本 Bot 的 Steam 积分余额（需要 SteamWebApiKey）。
+func (b *Bot) PointsBalance() (int64, error) {
+	if b.steamClient == nil || !b.steamClient.LoggedOn() {
+		return 0, fmt.Errorf("Bot %s 尚未登录", b.Name)
+	}
+	if b.SteamAPIKey == "" {
+		return 0, fmt.Errorf("未配置 SteamWebApiKey")
+	}
+	steamID := fmt.Sprintf("%d", b.steamClient.SteamID())
+	return steam.FetchPointsBalance(b.SteamAPIKey, steamID)
+}
+
+// UpdateCheck 检查上游 ASF 是否有新版本。
+func (b *Bot) UpdateCheck() (string, error) {
+	client := web.NewGitHubClient()
+	release, err := client.GetLatestRelease("JustArchiNET", "ArchiSteamFarm", true)
+	if err != nil {
+		return "", fmt.Errorf("检查更新失败: %w", err)
+	}
+	return fmt.Sprintf("上游 ASF 最新版本: %s（发布于 %s）", release.TagName, release.PublishedAt), nil
+}
+
 // isLootable 判断物品是否属于可转移类型（交易卡片/闪卡/补充包）。
 func isLootable(item inventory.Item) bool {
 	t := strings.ReplaceAll(item.Type, " ", "")
@@ -607,8 +631,11 @@ func fetchSteamLevel(b *Bot, steamID uint64) (int, error) {
 	return out.Response.PlayerLevel, nil
 }
 
-// checkAccess 检查发送者是否具有指定权限（Owner 始终通过）。
+// checkAccess 检查发送者是否具有指定权限（Owner 始终通过；黑名单用户一律拒绝）。
 func (b *Bot) checkAccess(chatterID uint64, min config.Access) bool {
+	if containsUint64(b.Blacklist, chatterID) {
+		return false
+	}
 	if b.OwnerSteamID != 0 && chatterID == b.OwnerSteamID {
 		return true
 	}
@@ -637,7 +664,7 @@ var reply string
 
 	switch {
 	case lower == "help":
-		reply = "可用命令: status, pause, resume, farm, loot <SteamID64>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, stats, version, exit, help"
+		reply = "可用命令: status, pause, resume, farm, restart, loot <SteamID64>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
 	case lower == "status":
 		if !b.checkAccess(chatterID, config.AccessOperator) {
 			reply = "权限不足"
@@ -691,6 +718,36 @@ var reply string
 			reply = "ASF Go 版"
 		} else {
 			reply = "ASF Go 版 " + b.ASFVersion
+		}
+	case lower == "points" || lower == "balance":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		points, err := b.PointsBalance()
+		if err != nil {
+			reply = fmt.Sprintf("查询积分失败: %v", err)
+		} else {
+			reply = fmt.Sprintf("Steam 积分: %d", points)
+		}
+	case lower == "restart":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		b.Pause()
+		b.Resume()
+		reply = "已重启挂机"
+	case lower == "update":
+		if !b.checkAccess(chatterID, config.AccessOperator) {
+			reply = "权限不足"
+			break
+		}
+		resp, err := b.UpdateCheck()
+		if err != nil {
+			reply = fmt.Sprintf("检查更新失败: %v", err)
+		} else {
+			reply = resp
 		}
 	case lower == "exit":
 		if b.OwnerSteamID == 0 || chatterID != b.OwnerSteamID {

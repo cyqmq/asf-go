@@ -132,6 +132,11 @@ func (a *ASF) loadBots() error {
 		b.OwnerSteamID = a.Config.SteamOwnerID
 		b.ASFVersion = Version
 		b.OnExit = func() { go func() { _ = a.Stop() }() }
+		blacklist := make([]uint64, 0, len(a.Config.Blacklist))
+		for _, id := range a.Config.Blacklist {
+			blacklist = append(blacklist, uint64(id))
+		}
+		b.Blacklist = blacklist
 		a.bots[botName] = b
 		a.Log.Info("已加载 Bot 配置: %s (启用=%v)", botName, cfg.Enabled)
 	}

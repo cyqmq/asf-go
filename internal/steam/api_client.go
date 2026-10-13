@@ -3,7 +3,10 @@ package steam
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"time"
 
 	gosteam "github.com/gofurry/steam-go"
@@ -32,6 +35,28 @@ func FetchOwnedGames(apiKey, steamID string) (map[uint32]string, error) {
 	}
 	return games, nil
 }
+// FetchPointsBalance 通过 Steam Web API 查询指定 SteamID 的积分余额（IPlayerService/GetPointsBalance）。
+func FetchPointsBalance(apiKey, steamID string) (int64, error) {
+	reqURL := fmt.Sprintf("https://api.steampowered.com/IPlayerService/GetPointsBalance/v1/?key=%s&steamid=%s", url.QueryEscape(apiKey), steamID)
+	resp, err := http.Get(reqURL)
+	if err != nil {
+		return 0, fmt.Errorf("GetPointsBalance 请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("GetPointsBalance 返回状态码 %d", resp.StatusCode)
+	}
+	var out struct {
+		Response struct {
+			Points int64 `json:"points"`
+		} `json:"response"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return 0, fmt.Errorf("解析 GetPointsBalance 响应失败: %w", err)
+	}
+	return out.Response.Points, nil
+}
+
 // FetchIncompleteBadgeAppIDs 通过 Steam Web API 获取"徽章未完成"（可能有卡牌掉落）的游戏 AppID 列表。
 // 需要 Steam Web API Key（https://steamcommunity.com/dev/apikey）。
 func FetchIncompleteBadgeAppIDs(apiKey, steamID string) ([]uint32, error) {

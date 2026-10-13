@@ -2,6 +2,9 @@
 
 将 [ArchiSteamFarm](https://github.com/JustArchiNET/ArchiSteamFarm)（C#/.NET）用 Go 重写的移植项目。已实现核心链路：**配置加载 → Bot 启动 → Steam 登录 → 卡牌挂机 → 聊天命令 → IPC Web API**。
 
+- GitHub：https://github.com/cyqmq/asf-go
+- 依赖自维护的 go-steam 协议库：https://github.com/cyqmq/go-steam（`github.com/cyqmq/go-steam/v3`）
+
 ## 架构对应关系
 
 | ASF 原 C# 模块 | Go 移植包 |
@@ -115,8 +118,8 @@ STEAM_AUTH=abc123 STEAM_2FA=123456 ./asf --config /path/to/config
 - [x] Beta 分支检查（`!checkappbeta <appid> <password>`，基于自维护 go-steam 的 SteamApps handler）
 - [x] 游戏所有权查询（`!owns <appid>`，基于 steam-go Web API 的 GetOwnedGames）
 - [x] 激活码兑换（`!redeem <key>`，Web 方式等价实现原版 RedeemKey）
-- [x] 权限体系（`SteamUserPermissions` + Owner，按原版 EAccess 控制各命令）
-- [x] 扩展命令集（`!farm` / `!level` / `!stats` / `!version` / `!exit`）
+- [x] 权限体系（`SteamUserPermissions` + Owner + 全局 `Blacklist`，按原版 EAccess 控制各命令）
+- [x] 扩展命令集（`!farm` / `!level` / `!stats` / `!version` / `!points` / `!restart` / `!update` / `!exit`）
 - [x] 游戏标识符解析（`app/`、`sub/`、商店链接、steam:// 链接，复刻原版 TryParseGameIdentifier）
 - [x] 好友请求处理（`AcceptFriendRequests` 自动接受 / `BotBehaviour.RejectInvalidFriendRequests` 拒绝无效请求）
 - [x] 聊天/群组邀请处理（`BotBehaviour.RejectInvalidGroupInvites`，可自动加入）
