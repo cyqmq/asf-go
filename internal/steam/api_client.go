@@ -35,6 +35,7 @@ func FetchOwnedGames(apiKey, steamID string) (map[uint32]string, error) {
 	}
 	return games, nil
 }
+
 // FetchPointsBalance 通过 Steam Web API 查询指定 SteamID 的积分余额（IPlayerService/GetPointsBalance）。
 func FetchPointsBalance(apiKey, steamID string) (int64, error) {
 	reqURL := fmt.Sprintf("https://api.steampowered.com/IPlayerService/GetPointsBalance/v1/?key=%s&steamid=%s", url.QueryEscape(apiKey), steamID)

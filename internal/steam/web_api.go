@@ -21,9 +21,9 @@ const SteamStoreURL = "https://store.steampowered.com"
 
 // WebSession 携带登录会话 Cookie，用于抓取卡牌页面等。
 type WebSession struct {
-	client            *http.Client
-	sessionID         string
-	steamLoginSecure  string
+	client           *http.Client
+	sessionID        string
+	steamLoginSecure string
 }
 
 // NewWebSession 基于 go-steam Web 模块提供的会话凭证创建。

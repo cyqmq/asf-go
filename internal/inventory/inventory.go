@@ -60,7 +60,7 @@ func GetOwnInventory(ws *steam.WebSession, steamID uint64, appID uint32, context
 			ID:         item.Id,
 			ClassID:    item.ClassId,
 			InstanceID: item.InstanceId,
-			Amount:    item.Amount,
+			Amount:     item.Amount,
 		}
 		if desc != nil {
 			out.Name = desc.Name

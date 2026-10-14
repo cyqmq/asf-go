@@ -4,18 +4,28 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
 
+// GitHubAsset 对应 ASF 的 ReleaseAsset。
+type GitHubAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"browser_download_url"`
+	Size int64  `json:"size"`
+}
+
 // GitHubRelease 对应 ASF 的 ReleaseResponse。
 type GitHubRelease struct {
-	TagName     string `json:"tag_name"`
-	Name        string `json:"name"`
-	PublishedAt string `json:"published_at"`
-	HTMLURL     string `json:"html_url"`
-	Prerelease  bool   `json:"prerelease"`
+	TagName     string        `json:"tag_name"`
+	Name        string        `json:"name"`
+	PublishedAt string        `json:"published_at"`
+	HTMLURL     string        `json:"html_url"`
+	Prerelease  bool          `json:"prerelease"`
+	Assets      []GitHubAsset `json:"assets"`
 }
 
 // GitHubClient 是 GitHub API 客户端。
@@ -83,4 +93,37 @@ func CompareVersions(a, b string) int {
 		}
 	}
 	return 0
+}
+
+// DownloadAsset 将 Release 附件下载到目标文件路径。
+func (g *GitHubClient) DownloadAsset(asset *GitHubAsset, destPath string) error {
+	if asset == nil || asset.URL == "" {
+		return fmt.Errorf("无效的 Release 附件")
+	}
+	req, err := http.NewRequest(http.MethodGet, asset.URL, nil)
+	if err != nil {
+		return fmt.Errorf("构造下载请求失败: %w", err)
+	}
+	req.Header.Set("User-Agent", "asf-go")
+	req.Header.Set("Accept", "application/octet-stream")
+
+	resp, err := g.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("下载失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("下载返回状态码 %d", resp.StatusCode)
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("创建文件失败: %w", err)
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		return fmt.Errorf("写入文件失败: %w", err)
+	}
+	return nil
 }

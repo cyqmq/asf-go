@@ -132,6 +132,17 @@ func (a *ASF) loadBots() error {
 		b.OwnerSteamID = a.Config.SteamOwnerID
 		b.ASFVersion = Version
 		b.OnExit = func() { go func() { _ = a.Stop() }() }
+		b.FindBotSteamID = func(name string) uint64 {
+			for n, bb := range a.bots {
+				if strings.EqualFold(n, name) {
+					if bb.IsConnected() {
+						return bb.SteamID()
+					}
+					return 0
+				}
+			}
+			return 0
+		}
 		blacklist := make([]uint64, 0, len(a.Config.Blacklist))
 		for _, id := range a.Config.Blacklist {
 			blacklist = append(blacklist, uint64(id))

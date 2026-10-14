@@ -5,8 +5,8 @@ import "testing"
 type testPlugin struct{}
 
 func (testPlugin) Name() string    { return "test" }
-func (testPlugin) Version() string     { return "1.0.0" }
-func (testPlugin) OnLoaded() error    { return nil }
+func (testPlugin) Version() string { return "1.0.0" }
+func (testPlugin) OnLoaded() error { return nil }
 
 type testASFPlugin struct{ testPlugin }
 

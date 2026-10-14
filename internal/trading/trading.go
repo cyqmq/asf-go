@@ -20,17 +20,17 @@ import (
 type TradeOfferState int
 
 const (
-	TradeOfferStateInvalid                   TradeOfferState = 1
-	TradeOfferStateActive                    TradeOfferState = 2
-	TradeOfferStateAccepted                  TradeOfferState = 3
-	TradeOfferStateCountered                 TradeOfferState = 4
-	TradeOfferStateExpired                   TradeOfferState = 5
-	TradeOfferStateCanceled                  TradeOfferState = 6
-	TradeOfferStateDeclined                  TradeOfferState = 7
-	TradeOfferStateInvalidItems              TradeOfferState = 8
-	TradeOfferStateCreatedNeedsConfirmation  TradeOfferState = 9
-	TradeOfferStateCanceledBySecondFactor    TradeOfferState = 10
-	TradeOfferStateInEscrow                  TradeOfferState = 11
+	TradeOfferStateInvalid                  TradeOfferState = 1
+	TradeOfferStateActive                   TradeOfferState = 2
+	TradeOfferStateAccepted                 TradeOfferState = 3
+	TradeOfferStateCountered                TradeOfferState = 4
+	TradeOfferStateExpired                  TradeOfferState = 5
+	TradeOfferStateCanceled                 TradeOfferState = 6
+	TradeOfferStateDeclined                 TradeOfferState = 7
+	TradeOfferStateInvalidItems             TradeOfferState = 8
+	TradeOfferStateCreatedNeedsConfirmation TradeOfferState = 9
+	TradeOfferStateCanceledBySecondFactor   TradeOfferState = 10
+	TradeOfferStateInEscrow                 TradeOfferState = 11
 )
 
 // TradeAsset 是交易报价中的物品条目。
@@ -46,16 +46,16 @@ type TradeAsset struct {
 
 // TradeOffer 是一条交易报价。
 type TradeOffer struct {
-	TradeOfferID   uint64       `json:"tradeofferid,string"`
-	AccountIDOther uint32       `json:"accountid_other"`
-	Message        string       `json:"message"`
+	TradeOfferID   uint64          `json:"tradeofferid,string"`
+	AccountIDOther uint32          `json:"accountid_other"`
+	Message        string          `json:"message"`
 	State          TradeOfferState `json:"trade_offer_state"`
-	IsOurOffer     bool         `json:"is_our_offer"`
-	TimeCreated    uint32       `json:"time_created"`
-	TimeUpdated    uint32       `json:"time_updated"`
-	ItemsToGive    []TradeAsset `json:"items_to_give"`
-	ItemsToReceive []TradeAsset `json:"items_to_receive"`
-	EscrowEndDate  uint32       `json:"escrow_end_date"`
+	IsOurOffer     bool            `json:"is_our_offer"`
+	TimeCreated    uint32          `json:"time_created"`
+	TimeUpdated    uint32          `json:"time_updated"`
+	ItemsToGive    []TradeAsset    `json:"items_to_give"`
+	ItemsToReceive []TradeAsset    `json:"items_to_receive"`
+	EscrowEndDate  uint32          `json:"escrow_end_date"`
 }
 
 // GetTradeOffersResponse 是 IEconService/GetTradeOffers/v1 的响应。

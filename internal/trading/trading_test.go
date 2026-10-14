@@ -56,16 +56,16 @@ func TestGetTradeOffersResponseParse(t *testing.T) {
 
 func TestTradeOfferStateConstants(t *testing.T) {
 	cases := map[TradeOfferState]int{
-		TradeOfferStateInvalid:                 1,
+		TradeOfferStateInvalid:                  1,
 		TradeOfferStateActive:                   2,
-		TradeOfferStateAccepted:                3,
+		TradeOfferStateAccepted:                 3,
 		TradeOfferStateCountered:                4,
 		TradeOfferStateExpired:                  5,
-		TradeOfferStateCanceled:                6,
-		TradeOfferStateDeclined:                7,
-		TradeOfferStateInvalidItems:          8,
+		TradeOfferStateCanceled:                 6,
+		TradeOfferStateDeclined:                 7,
+		TradeOfferStateInvalidItems:             8,
 		TradeOfferStateCreatedNeedsConfirmation: 9,
-		TradeOfferStateCanceledBySecondFactor: 10,
+		TradeOfferStateCanceledBySecondFactor:   10,
 		TradeOfferStateInEscrow:                 11,
 	}
 	for state, want := range cases {

@@ -4,6 +4,7 @@ package bot
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,29 +14,39 @@ import (
 	"github.com/asf-go/asf/internal/logging"
 )
 
+// containsUint32 判断切片中是否包含目标值。
+func containsUint32(list []uint32, target uint32) bool {
+	for _, v := range list {
+		if v == target {
+			return true
+		}
+	}
+	return false
+}
+
 // GameInfo 表示一个待挂机游戏及其剩余卡牌数。
 type GameInfo struct {
-	AppID         uint32
-	Name          string
+	AppID          uint32
+	Name           string
 	CardsRemaining int
 }
 
 // CardsFarmer 负责卡牌掉落挂机。
 type CardsFarmer struct {
-	bot  *Bot
-	log  *logging.Logger
+	bot *Bot
+	log *logging.Logger
 
-	mu         sync.Mutex
-	running    bool
-	stopCh     chan struct{}
+	mu          sync.Mutex
+	running     bool
+	stopCh      chan struct{}
 	gamesToFarm []GameInfo
 }
 
 // NewCardsFarmer 创建挂机器。
 func NewCardsFarmer(b *Bot) *CardsFarmer {
 	return &CardsFarmer{
-		bot:  b,
-		log:  b.Log,
+		bot:    b,
+		log:    b.Log,
 		stopCh: make(chan struct{}),
 	}
 }
@@ -116,6 +127,32 @@ func (cf *CardsFarmer) farmOnce() {
 	if err != nil {
 		cf.log.Error("获取卡牌掉落列表失败: %v", err)
 		return
+	}
+
+	// 应用挂机黑名单过滤
+	if len(cf.bot.Config.FarmingBlacklist) > 0 {
+		filtered := make([]GameInfo, 0, len(games))
+		for _, g := range games {
+			if !containsUint32(cf.bot.Config.FarmingBlacklist, g.AppID) {
+				filtered = append(filtered, g)
+			}
+		}
+		games = filtered
+	}
+
+	// 挂机队列优先排序（队列中的游戏排前面）
+	if len(cf.bot.Config.FarmingQueue) > 0 {
+		queueRank := func(appID uint32) int {
+			for i, id := range cf.bot.Config.FarmingQueue {
+				if id == appID {
+					return i
+				}
+			}
+			return len(cf.bot.Config.FarmingQueue)
+		}
+		sort.SliceStable(games, func(i, j int) bool {
+			return queueRank(games[i].AppID) < queueRank(games[j].AppID)
+		})
 	}
 
 	cf.mu.Lock()

@@ -116,3 +116,102 @@ func TestCommandsEndpoint(t *testing.T) {
 		t.Fatalf("状态码应为 200，得到 %d", resp.StatusCode)
 	}
 }
+func TestIPCBanOnRepeatedFailures(t *testing.T) {
+	setupTestASF(t)
+	clearFailedAuthorizations()
+	addr := os.Getenv("TEST_ADDR")
+
+	client := &http.Client{}
+	for i := 0; i < maxFailedAuthorizationAttempts; i++ {
+		req, _ := http.NewRequest("GET", "http://"+addr+"/api/ASF", nil)
+		req.SetBasicAuth("ipc", "wrongpass")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("第 %d 次错误密码应返回 401，得到 %d", i+1, resp.StatusCode)
+		}
+	}
+
+	// 达到阈值后应返回 403
+	req, _ := http.NewRequest("GET", "http://"+addr+"/api/ASF", nil)
+	req.SetBasicAuth("ipc", "wrongpass")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("封禁后应返回 403，得到 %d", resp.StatusCode)
+	}
+
+	// 封禁后即使密码正确也无法访问任何端点（原版行为）
+	req, _ = http.NewRequest("GET", "http://"+addr+"/api/IPC/Bans", nil)
+	req.SetBasicAuth("ipc", "testpass")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("封禁后访问 Bans 应返回 403，得到 %d", resp.StatusCode)
+	}
+
+	// 封禁列表应包含本机地址
+	banned := getCurrentlyBannedIPs()
+	found := false
+	for _, ip := range banned {
+		if ip == "127.0.0.1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("封禁列表应包含 127.0.0.1，得到 %#v", banned)
+	}
+
+	// 单元级解封后恢复 401
+	if !unbanIP("127.0.0.1") {
+		t.Fatal("unbanIP 应返回 true")
+	}
+	req, _ = http.NewRequest("GET", "http://"+addr+"/api/ASF", nil)
+	req.SetBasicAuth("ipc", "wrongpass")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("解封后错误密码应返回 401，得到 %d", resp.StatusCode)
+	}
+}
+
+func TestIPCBansEndpoint(t *testing.T) {
+	setupTestASF(t)
+	clearFailedAuthorizations()
+	addr := os.Getenv("TEST_ADDR")
+
+	// 无认证访问 Bans 列表应被拒绝（401）
+	resp, err := http.Get("http://" + addr + "/api/IPC/Bans")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("无认证访问 Bans 应返回 401，得到 %d", resp.StatusCode)
+	}
+
+	// 正确认证返回成功
+	req, _ := http.NewRequest("GET", "http://"+addr+"/api/IPC/Bans", nil)
+	req.SetBasicAuth("ipc", "testpass")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("认证后应返回 200，得到 %d", resp.StatusCode)
+	}
+}

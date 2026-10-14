@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -27,12 +29,13 @@ type Bot struct {
 	Config *config.BotConfig
 	Log    *logging.Logger
 
-	CommandPrefix string
-	SteamAPIKey  string
-	OwnerSteamID uint64
-	ASFVersion   string
-	OnExit       func()
-	Blacklist    []uint64
+	CommandPrefix  string
+	SteamAPIKey    string
+	OwnerSteamID   uint64
+	ASFVersion     string
+	OnExit         func()
+	Blacklist      []uint64
+	FindBotSteamID func(name string) uint64
 
 	configDir   string
 	loginKey    string
@@ -40,8 +43,8 @@ type Bot struct {
 	cardsFarmer *CardsFarmer
 	auth        *authenticator.Authenticator
 
-	tradingStopCh  chan struct{}
-	tradingDoneCh  chan struct{}
+	tradingStopCh chan struct{}
+	tradingDoneCh chan struct{}
 }
 
 // New 创建 Bot 实例。configDir 用于持久化登录 Key。
@@ -51,10 +54,10 @@ func New(name string, cfg *config.BotConfig, configDir string) (*Bot, error) {
 		return nil, err
 	}
 	b := &Bot{
-		Name:       name,
-		Config:     cfg,
-		Log:        log,
-		configDir:  configDir,
+		Name:      name,
+		Config:    cfg,
+		Log:       log,
+		configDir: configDir,
 	}
 	b.loginKey = b.loadLoginKey()
 	b.auth = b.loadAuthenticator()
@@ -80,7 +83,7 @@ func (b *Bot) Start() error {
 	client.SetOnChatMessage(b.handleCommand)
 	client.SetOnFriendRequest(b.handleFriendRequest)
 	client.SetOnChatInvite(b.handleChatInvite)
-// Steam Guard：优先使用 maFile 生成令牌码；否则支持环境变量注入
+	// Steam Guard：优先使用 maFile 生成令牌码；否则支持环境变量注入
 	if b.auth != nil {
 		if code, err := b.auth.GenerateCode(); err == nil {
 			client.SetTwoFactorCode(code)
@@ -149,6 +152,14 @@ func (b *Bot) Resume() {
 // IsConnected 返回 Steam 登录状态。
 func (b *Bot) IsConnected() bool {
 	return b.steamClient != nil && b.steamClient.LoggedOn()
+}
+
+// SteamID 返回当前 Bot 的 SteamID64（未登录时为 0）。
+func (b *Bot) SteamID() uint64 {
+	if b.steamClient == nil {
+		return 0
+	}
+	return b.steamClient.SteamID()
 }
 
 // BadgeCandidatesFromAPI 使用 Steam Web API 获取"徽章未完成"的游戏 AppID 列表。
@@ -289,6 +300,7 @@ func (b *Bot) handleTradeOffer(offer trading.TradeOffer) {
 	partnerSteamID := uint64(0x0110000100000000) | uint64(partnerAccountID)
 	prefs := b.Config.TradingPreferences
 	b.Log.Info("收到报价 %d（对方 SteamID %d，消息: %q）", offer.TradeOfferID, partnerSteamID, offer.Message)
+	b.notifyOwner(fmt.Sprintf("Bot %s 收到新交易报价 %d（对方 %d）", b.Name, offer.TradeOfferID, partnerSteamID))
 
 	// 黑名单：直接拒绝
 	if containsUint64(b.Config.TradingBlacklist, partnerSteamID) {
@@ -586,14 +598,182 @@ func (b *Bot) PointsBalance() (int64, error) {
 	return steam.FetchPointsBalance(b.SteamAPIKey, steamID)
 }
 
-// UpdateCheck 检查上游 ASF 是否有新版本。
-func (b *Bot) UpdateCheck() (string, error) {
+// Update 检查 asf-go 自身是否有新版本；若有则下载对应平台二进制、替换并重启。
+func (b *Bot) Update() (string, error) {
 	client := web.NewGitHubClient()
-	release, err := client.GetLatestRelease("JustArchiNET", "ArchiSteamFarm", true)
+	release, err := client.GetLatestRelease("cyqmq", "asf-go", true)
 	if err != nil {
-		return "", fmt.Errorf("检查更新失败: %w", err)
+		// asf-go 尚无 Release 时回退到上游 ASF 版本信息
+		upstream, upErr := client.GetLatestRelease("JustArchiNET", "ArchiSteamFarm", true)
+		if upErr != nil {
+			return "", fmt.Errorf("检查更新失败: %w", err)
+		}
+		return fmt.Sprintf("asf-go 暂无 Release，上游 ASF 最新版本: %s", upstream.TagName), nil
 	}
-	return fmt.Sprintf("上游 ASF 最新版本: %s（发布于 %s）", release.TagName, release.PublishedAt), nil
+
+	if web.CompareVersions(release.TagName, b.ASFVersion) <= 0 {
+		return fmt.Sprintf("当前已是最新版本 %s", b.ASFVersion), nil
+	}
+
+	assetName := fmt.Sprintf("asf-go-%s-%s", runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		assetName += ".exe"
+	}
+	var asset *web.GitHubAsset
+	for i := range release.Assets {
+		if release.Assets[i].Name == assetName {
+			asset = &release.Assets[i]
+			break
+		}
+	}
+	if asset == nil {
+		return "", fmt.Errorf("新版本 %s 中未找到当前平台更新包 %s", release.TagName, assetName)
+	}
+
+	b.Log.Info("发现新版本 %s，正在下载 %s ...", release.TagName, asset.Name)
+	tmpFile, err := os.CreateTemp("", "asf-go-update-*")
+	if err != nil {
+		return "", fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+
+	if err := client.DownloadAsset(asset, tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("下载更新包失败: %w", err)
+	}
+
+	if err := os.Chmod(tmpPath, 0o755); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("设置执行权限失败: %w", err)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("定位当前可执行文件失败: %w", err)
+	}
+
+	// 备份旧文件再替换，避免替换失败导致程序不可用
+	backupPath := exe + ".old"
+	_ = os.Remove(backupPath)
+	if err := os.Rename(exe, backupPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("备份旧可执行文件失败: %w", err)
+	}
+	if err := os.Rename(tmpPath, exe); err != nil {
+		_ = os.Rename(backupPath, exe)
+		return "", fmt.Errorf("替换可执行文件失败: %w", err)
+	}
+
+	b.Log.Info("更新完成，正在重启 ...")
+	cmd := exec.Command(exe)
+	cmd.Env = os.Environ()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("重启失败: %w", err)
+	}
+
+	if b.OnExit != nil {
+		b.OnExit()
+	}
+	return fmt.Sprintf("已更新到 %s，正在重启", release.TagName), nil
+}
+
+// UpdateCheck 检查上游 ASF 是否有新版本。
+// UnpackBoosters 打开库存中所有补充包，返回开包数量。
+func (b *Bot) UnpackBoosters() (int, error) {
+	if b.steamClient == nil || !b.steamClient.LoggedOn() {
+		return 0, fmt.Errorf("Bot %s 尚未登录", b.Name)
+	}
+	ws, err := b.steamClient.WebSession()
+	if err != nil {
+		return 0, fmt.Errorf("Web 会话不可用: %w", err)
+	}
+	steamID := b.steamClient.SteamID()
+	if steamID == 0 {
+		return 0, fmt.Errorf("Bot %s SteamID 无效", b.Name)
+	}
+
+	inv, err := inventory.GetOwnInventory(ws, steamID, 753, 6)
+	if err != nil {
+		return 0, fmt.Errorf("获取库存失败: %w", err)
+	}
+
+	opened := 0
+	for _, item := range inv.Items {
+		if strings.ReplaceAll(item.Type, " ", "") != "BoosterPack" {
+			continue
+		}
+		ok, err := store.UnpackBooster(ws, steamID, 753, item.ID)
+		if err != nil {
+			b.Log.Warn("开补充包 %d 失败: %v", item.ID, err)
+			continue
+		}
+		if ok {
+			opened++
+			b.Log.Info("已打开补充包 %d", item.ID)
+		} else {
+			b.Log.Warn("开补充包 %d 返回失败", item.ID)
+		}
+	}
+	return opened, nil
+}
+
+// FarmingBlacklistAdd 添加游戏到挂机黑名单并保存配置。
+func (b *Bot) FarmingBlacklistAdd(appID uint32) error {
+	for _, id := range b.Config.FarmingBlacklist {
+		if id == appID {
+			return nil
+		}
+	}
+	b.Config.FarmingBlacklist = append(b.Config.FarmingBlacklist, appID)
+	return b.saveConfig()
+}
+
+// FarmingBlacklistRemove 从挂机黑名单移除游戏并保存配置。
+func (b *Bot) FarmingBlacklistRemove(appID uint32) error {
+	filtered := make([]uint32, 0, len(b.Config.FarmingBlacklist))
+	for _, id := range b.Config.FarmingBlacklist {
+		if id != appID {
+			filtered = append(filtered, id)
+		}
+	}
+	b.Config.FarmingBlacklist = filtered
+	return b.saveConfig()
+}
+
+// FarmingQueueAdd 添加游戏到挂机队列并保存配置。
+func (b *Bot) FarmingQueueAdd(appID uint32) error {
+	for _, id := range b.Config.FarmingQueue {
+		if id == appID {
+			return nil
+		}
+	}
+	b.Config.FarmingQueue = append(b.Config.FarmingQueue, appID)
+	return b.saveConfig()
+}
+
+// FarmingQueueRemove 从挂机队列移除游戏并保存配置。
+func (b *Bot) FarmingQueueRemove(appID uint32) error {
+	filtered := make([]uint32, 0, len(b.Config.FarmingQueue))
+	for _, id := range b.Config.FarmingQueue {
+		if id != appID {
+			filtered = append(filtered, id)
+		}
+	}
+	b.Config.FarmingQueue = filtered
+	return b.saveConfig()
+}
+
+// saveConfig 将 Bot 配置保存到配置目录。
+func (b *Bot) saveConfig() error {
+	path := filepath.Join(b.configDir, b.Name+".json")
+	if err := b.Config.Save(path); err != nil {
+		return fmt.Errorf("保存 Bot 配置失败: %w", err)
+	}
+	return nil
 }
 
 // isLootable 判断物品是否属于可转移类型（交易卡片/闪卡/补充包）。
@@ -660,11 +840,11 @@ func (b *Bot) handleCommand(chatterID uint64, message string) {
 
 	b.Log.Info("收到来自 %d 的命令: %s", chatterID, command)
 
-var reply string
+	var reply string
 
 	switch {
 	case lower == "help":
-		reply = "可用命令: status, pause, resume, farm, restart, loot <SteamID64>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
+		reply = "可用命令: status, pause, resume, farm, restart, unpack, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
 	case lower == "status":
 		if !b.checkAccess(chatterID, config.AccessOperator) {
 			reply = "权限不足"
@@ -743,11 +923,105 @@ var reply string
 			reply = "权限不足"
 			break
 		}
-		resp, err := b.UpdateCheck()
+		reply, _ = b.Update()
+	case lower == "unpack":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		opened, err := b.UnpackBoosters()
 		if err != nil {
-			reply = fmt.Sprintf("检查更新失败: %v", err)
+			reply = fmt.Sprintf("开补充包失败: %v", err)
 		} else {
-			reply = resp
+			reply = fmt.Sprintf("已打开 %d 个补充包", opened)
+		}
+	case lower == "fb":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		if len(b.Config.FarmingBlacklist) == 0 {
+			reply = "挂机黑名单为空"
+		} else {
+			ids := make([]string, 0, len(b.Config.FarmingBlacklist))
+			for _, id := range b.Config.FarmingBlacklist {
+				ids = append(ids, strconv.FormatUint(uint64(id), 10))
+			}
+			reply = "挂机黑名单: " + strings.Join(ids, ", ")
+		}
+	case strings.HasPrefix(lower, "fbadd "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		appID, err := strconv.ParseUint(strings.TrimSpace(command[len("fbadd"):]), 10, 32)
+		if err != nil {
+			reply = "无效 appid"
+		} else {
+			if err := b.FarmingBlacklistAdd(uint32(appID)); err != nil {
+				reply = fmt.Sprintf("保存失败: %v", err)
+			} else {
+				reply = fmt.Sprintf("已将 app/%d 加入挂机黑名单", appID)
+			}
+		}
+	case strings.HasPrefix(lower, "fbrm "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		appID, err := strconv.ParseUint(strings.TrimSpace(command[len("fbrm"):]), 10, 32)
+		if err != nil {
+			reply = "无效 appid"
+		} else {
+			if err := b.FarmingBlacklistRemove(uint32(appID)); err != nil {
+				reply = fmt.Sprintf("保存失败: %v", err)
+			} else {
+				reply = fmt.Sprintf("已将 app/%d 移出挂机黑名单", appID)
+			}
+		}
+	case lower == "fq":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		if len(b.Config.FarmingQueue) == 0 {
+			reply = "挂机队列为空"
+		} else {
+			ids := make([]string, 0, len(b.Config.FarmingQueue))
+			for _, id := range b.Config.FarmingQueue {
+				ids = append(ids, strconv.FormatUint(uint64(id), 10))
+			}
+			reply = "挂机队列: " + strings.Join(ids, ", ")
+		}
+	case strings.HasPrefix(lower, "fqadd "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		appID, err := strconv.ParseUint(strings.TrimSpace(command[len("fqadd"):]), 10, 32)
+		if err != nil {
+			reply = "无效 appid"
+		} else {
+			if err := b.FarmingQueueAdd(uint32(appID)); err != nil {
+				reply = fmt.Sprintf("保存失败: %v", err)
+			} else {
+				reply = fmt.Sprintf("已将 app/%d 加入挂机队列", appID)
+			}
+		}
+	case strings.HasPrefix(lower, "fqrm "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		appID, err := strconv.ParseUint(strings.TrimSpace(command[len("fqrm"):]), 10, 32)
+		if err != nil {
+			reply = "无效 appid"
+		} else {
+			if err := b.FarmingQueueRemove(uint32(appID)); err != nil {
+				reply = fmt.Sprintf("保存失败: %v", err)
+			} else {
+				reply = fmt.Sprintf("已将 app/%d 移出挂机队列", appID)
+			}
 		}
 	case lower == "exit":
 		if b.OwnerSteamID == 0 || chatterID != b.OwnerSteamID {
@@ -773,6 +1047,26 @@ var reply string
 				reply = fmt.Sprintf("发送报价失败: %v", err)
 			} else {
 				reply = fmt.Sprintf("已发送报价 %d", offerID)
+			}
+		}
+	case strings.HasPrefix(lower, "transfer "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		arg := strings.TrimSpace(command[len("transfer"):])
+		targetID := uint64(0)
+		if b.FindBotSteamID != nil {
+			targetID = b.FindBotSteamID(arg)
+		}
+		if targetID == 0 {
+			reply = fmt.Sprintf("目标 Bot %s 未连接或不存在", arg)
+		} else {
+			offerID, err := b.Loot(targetID)
+			if err != nil {
+				reply = fmt.Sprintf("发送报价失败: %v", err)
+			} else {
+				reply = fmt.Sprintf("已向 %s 发送报价 %d", arg, offerID)
 			}
 		}
 	case strings.HasPrefix(lower, "addlicense") || strings.HasPrefix(lower, "addlicence") || strings.HasPrefix(lower, "al"):

@@ -42,6 +42,7 @@ func (s *Server) Start(addr string) error {
 	mux.HandleFunc("/api/ASF", s.auth(s.handleASF))
 	mux.HandleFunc("/api/bot/", s.auth(s.handleBot))
 	mux.HandleFunc("/api/commands", s.auth(s.handleCommands))
+	mux.HandleFunc("/api/IPC/Bans", s.auth(s.handleIPCBans))
 
 	s.httpSrv = &http.Server{Handler: mux}
 	s.log.Info("IPC 服务监听于 %s", addr)
@@ -61,19 +62,67 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-// auth 基于 IPC 密码的 Basic 认证（用户名固定为 ipc）。
+// auth 基于 IPC 密码的 Basic 认证（用户名固定为 ipc），并实现失败封禁（IPCBans）。
+// 无密码时仅允许回环地址访问；认证失败连续达到阈值后封禁该 IP，每小时自动解封。
 func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.password != "" {
-			user, pass, ok := r.BasicAuth()
-			if !ok || user != "ipc" || subtle.ConstantTimeCompare([]byte(pass), []byte(s.password)) != 1 {
-				w.Header().Set("WWW-Authenticate", `Basic realm="ASF"`)
-				writeJSON(w, http.StatusUnauthorized, map[string]any{"success": false, "message": "Unauthorized"})
+		ip := clientIP(r.RemoteAddr)
+
+		if isBanned(ip) {
+			writeJSON(w, http.StatusForbidden, map[string]any{"success": false, "message": "Forbidden"})
+			return
+		}
+
+		if s.password == "" {
+			parsed := net.ParseIP(ip)
+			if parsed == nil || !parsed.IsLoopback() {
+				writeJSON(w, http.StatusForbidden, map[string]any{"success": false, "message": "Forbidden"})
 				return
 			}
+			next(w, r)
+			return
+		}
+
+		user, pass, ok := r.BasicAuth()
+		if !ok || user != "ipc" || subtle.ConstantTimeCompare([]byte(pass), []byte(s.password)) != 1 {
+			recordFailure(ip)
+			w.Header().Set("WWW-Authenticate", `Basic realm="ASF"`)
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"success": false, "message": "Unauthorized"})
+			return
 		}
 		next(w, r)
 	}
+}
+
+// handleIPCBans 管理被封禁的 IP 列表（对应原版 IPCBansController）。
+func (s *Server) handleIPCBans(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "result": getCurrentlyBannedIPs()})
+	case http.MethodDelete:
+		path := strings.TrimPrefix(r.URL.Path, "/api/IPC/Bans")
+		path = strings.Trim(path, "/")
+		if path == "" {
+			clearFailedAuthorizations()
+			writeJSON(w, http.StatusOK, map[string]any{"success": true})
+			return
+		}
+		if !validIP(path) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "无效 IP 地址"})
+			return
+		}
+		if unbanIP(path) {
+			writeJSON(w, http.StatusOK, map[string]any{"success": true})
+		} else {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "该 IP 未被封禁"})
+		}
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"success": false, "message": "方法不允许"})
+	}
+}
+
+func validIP(s string) bool {
+	return net.ParseIP(s) != nil
 }
 
 func (s *Server) handleASF(w http.ResponseWriter, _ *http.Request) {
@@ -123,6 +172,72 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 			b.Pause()
 			b.Resume()
 			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "已重启"})
+		case "POST farm":
+			b.Pause()
+			b.Resume()
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "已开始挂机"})
+		case "GET gamesToFarm":
+			games := b.FarmingGames()
+			list := make([]map[string]any, 0, len(games))
+			for _, g := range games {
+				list = append(list, map[string]any{"appid": g.AppID, "name": g.Name, "cards_remaining": g.CardsRemaining})
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "result": list})
+		case "GET farmingBlacklist":
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "result": b.Config.FarmingBlacklist})
+		case "POST farmingBlacklist/add":
+			appID, err := parseUint32(r.URL.Query().Get("appid"))
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "appid 无效"})
+				return
+			}
+			if err := b.FarmingBlacklistAdd(appID); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "已添加"})
+		case "POST farmingBlacklist/remove":
+			appID, err := parseUint32(r.URL.Query().Get("appid"))
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "appid 无效"})
+				return
+			}
+			if err := b.FarmingBlacklistRemove(appID); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "已移除"})
+		case "GET farmingQueue":
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "result": b.Config.FarmingQueue})
+		case "POST farmingQueue/add":
+			appID, err := parseUint32(r.URL.Query().Get("appid"))
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "appid 无效"})
+				return
+			}
+			if err := b.FarmingQueueAdd(appID); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "已添加"})
+		case "POST farmingQueue/remove":
+			appID, err := parseUint32(r.URL.Query().Get("appid"))
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "appid 无效"})
+				return
+			}
+			if err := b.FarmingQueueRemove(appID); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "已移除"})
+		case "POST unpack":
+			opened, err := b.UnpackBoosters()
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "result": map[string]any{"opened": opened}})
 		case "GET 2fa":
 			code, err := b.TwoFactorCode()
 			if err != nil {
@@ -271,12 +386,12 @@ func botStatusMap(b *bot.Bot) map[string]any {
 		games = append(games, map[string]any{"appid": g.AppID, "name": g.Name, "cards_remaining": g.CardsRemaining})
 	}
 	return map[string]any{
-		"name":            b.Name,
-		"enabled":         b.Config.Enabled,
-		"connected":       b.IsConnected(),
-		"online_status":   b.Config.OnlineStatus,
-		"farming_games":   games,
-		"steam_login":     b.Config.SteamLogin,
+		"name":          b.Name,
+		"enabled":       b.Config.Enabled,
+		"connected":     b.IsConnected(),
+		"online_status": b.Config.OnlineStatus,
+		"farming_games": games,
+		"steam_login":   b.Config.SteamLogin,
 	}
 }
 

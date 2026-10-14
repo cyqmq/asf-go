@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/asf-go/asf/internal/logging"
 	"github.com/cyqmq/go-steam/v3"
 	"github.com/cyqmq/go-steam/v3/protocol/steamlang"
 	"github.com/cyqmq/go-steam/v3/steamid"
-	"github.com/asf-go/asf/internal/logging"
 )
 
 // Client 是对 go-steam Client 的薄封装。
@@ -25,16 +25,16 @@ type Client struct {
 	authCode string
 	twoFA    string
 
-	onLoginKey func(string)
-	onChatMessage func(chatterID uint64, message string)
+	onLoginKey      func(string)
+	onChatMessage   func(chatterID uint64, message string)
 	onFriendRequest func(friendID uint64)
-	onChatInvite  func(inviterID uint64, chatRoomID uint64, roomName string)
+	onChatInvite    func(inviterID uint64, chatRoomID uint64, roomName string)
 
 	webSession *WebSession
 
-	loggedOn chan struct{}
+	loggedOn   chan struct{}
 	isLoggedOn atomic.Bool
-	stopCh   chan struct{}
+	stopCh     chan struct{}
 }
 
 // NewClient 创建 Steam 客户端。

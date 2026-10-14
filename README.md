@@ -94,6 +94,12 @@ STEAM_AUTH=abc123 STEAM_2FA=123456 ./asf --config /path/to/config
 | `/api/bot/{name}/loot` | POST | 发送战利品（target_steamid） |
 | `/api/bot/{name}/addlicense` | POST | 激活免费许可（identifiers 数组） |
 | `/api/bot/{name}/redeem` | POST | 兑换激活码（keys 数组） |
+| `/api/bot/{name}/unpack` | POST | 开启全部补充包 |
+| `/api/bot/{name}/farm` | POST | 开始挂机 |
+| `/api/bot/{name}/gamesToFarm` | GET | 当前挂机游戏列表 |
+| `/api/bot/{name}/farmingBlacklist` | GET / POST add / POST remove | 挂机黑名单管理（appid） |
+| `/api/bot/{name}/farmingQueue` | GET / POST add / POST remove | 挂机队列管理（appid） |
+| `/api/IPC/Bans` | GET / DELETE | 查看 / 清除被封禁 IP（防爆破） |
 | `/api/commands` | POST | 执行命令（status/pause/resume/exit） |
 
 认证：`IPCPassword` 为空时无需认证；非空时使用 HTTP Basic Auth（用户名 `ipc`）。
@@ -120,6 +126,13 @@ STEAM_AUTH=abc123 STEAM_2FA=123456 ./asf --config /path/to/config
 - [x] 激活码兑换（`!redeem <key>`，Web 方式等价实现原版 RedeemKey）
 - [x] 权限体系（`SteamUserPermissions` + Owner + 全局 `Blacklist`，按原版 EAccess 控制各命令）
 - [x] 扩展命令集（`!farm` / `!level` / `!stats` / `!version` / `!points` / `!restart` / `!update` / `!exit`）
+- [x] 补充包开启（`!unpack`，POST `ajaxunpackbooster`）
+- [x] 挂机黑名单 / 队列（`!fb` / `!fbadd` / `!fbrm`、`!fq` / `!fqadd` / `!fqrm`，配置持久化到 BotConfig）
+- [x] 自动更新（`!update`，检查 asf-go Release，下载对应平台二进制替换并重启；无 Release 时回退显示上游 ASF 版本）
+- [x] IPC 防暴力破解（连续 5 次认证失败封禁 IP，每小时自动解封，`/api/IPC/Bans` 管理）
+- [x] 通知推送（交易报价 / 好友请求 / 群组邀请主动推送给 Owner）
+- [x] 库存转移命令（`!transfer <BotName>`，将可转移物品发送给目标 Bot）
+- [x] GitHub Actions 多平台发布工作流（打 `v*` tag 自动构建 5 平台二进制并发布 Release，配合 `!update` 自动更新）
 - [x] 游戏标识符解析（`app/`、`sub/`、商店链接、steam:// 链接，复刻原版 TryParseGameIdentifier）
 - [x] 好友请求处理（`AcceptFriendRequests` 自动接受 / `BotBehaviour.RejectInvalidFriendRequests` 拒绝无效请求）
 - [x] 聊天/群组邀请处理（`BotBehaviour.RejectInvalidGroupInvites`，可自动加入）
