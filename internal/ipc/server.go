@@ -299,12 +299,13 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 			var req struct {
 				SharedSecret   string `json:"shared_secret"`
 				IdentitySecret string `json:"identity_secret"`
+				DeviceID       string `json:"device_id"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": err.Error()})
 				return
 			}
-			if err := b.ImportAuthenticator(req.SharedSecret, req.IdentitySecret); err != nil {
+			if err := b.ImportAuthenticator(req.SharedSecret, req.IdentitySecret, req.DeviceID); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": err.Error()})
 				return
 			}

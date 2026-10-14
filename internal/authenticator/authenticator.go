@@ -25,11 +25,12 @@ type Authenticator struct {
 }
 
 // Import 从 shared_secret 与 identity_secret（Base64）导入令牌。
-func Import(sharedSecret, identitySecret string) (*Authenticator, error) {
+// deviceID 可选（如 "android:xxxx"），用于移动确认接口的设备标识。
+func Import(sharedSecret, identitySecret, deviceID string) (*Authenticator, error) {
 	if _, err := base64.StdEncoding.DecodeString(sharedSecret); err != nil {
 		return nil, fmt.Errorf("shared_secret 不是有效 Base64: %w", err)
 	}
-	return &Authenticator{SharedSecret: sharedSecret, IdentitySecret: identitySecret}, nil
+	return &Authenticator{SharedSecret: sharedSecret, IdentitySecret: identitySecret, DeviceID: deviceID}, nil
 }
 
 // GenerateCode 生成当前 Steam Guard 5 位字母数字验证码。

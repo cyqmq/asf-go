@@ -18,7 +18,7 @@ func testSecret(t *testing.T) string {
 }
 
 func TestGenerateCodeFormat(t *testing.T) {
-	a, err := Import(testSecret(t), testSecret(t))
+	a, err := Import(testSecret(t), testSecret(t), "android:test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestGenerateCodeFormat(t *testing.T) {
 }
 
 func TestGenerateCodeDeterministic(t *testing.T) {
-	a, _ := Import(testSecret(t), testSecret(t))
+	a, _ := Import(testSecret(t), testSecret(t), "android:test")
 	at := time.Unix(1700000000, 0)
 	c1, _ := a.GenerateCodeAt(at)
 	c2, _ := a.GenerateCodeAt(at)
@@ -48,7 +48,7 @@ func TestGenerateCodeDeterministic(t *testing.T) {
 }
 
 func TestGenerateConfirmationCode(t *testing.T) {
-	a, _ := Import(testSecret(t), testSecret(t))
+	a, _ := Import(testSecret(t), testSecret(t), "android:test")
 	code, err := a.GenerateConfirmationCode("conf")
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +60,7 @@ func TestGenerateConfirmationCode(t *testing.T) {
 
 func TestSaveLoad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ma.json")
-	a, _ := Import(testSecret(t), testSecret(t))
+	a, _ := Import(testSecret(t), testSecret(t), "android:test")
 	if err := a.Save(path); err != nil {
 		t.Fatal(err)
 	}

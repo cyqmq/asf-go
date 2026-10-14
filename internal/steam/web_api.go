@@ -46,6 +46,14 @@ func NewWebSession(sessionID, steamLoginSecure string) (*WebSession, error) {
 	return &WebSession{client: &http.Client{Jar: jar}, sessionID: sessionID, steamLoginSecure: steamLoginSecure}, nil
 }
 
+// NewWebSessionWithClient 使用自定义 HTTP 客户端创建 Web 会话（主要用于测试）。
+func NewWebSessionWithClient(sessionID, steamLoginSecure string, client *http.Client) (*WebSession, error) {
+	if client == nil {
+		return nil, fmt.Errorf("HTTP 客户端为空")
+	}
+	return &WebSession{client: client, sessionID: sessionID, steamLoginSecure: steamLoginSecure}, nil
+}
+
 // SessionID 返回 steamcommunity 会话 ID。
 func (w *WebSession) SessionID() string {
 	return w.sessionID

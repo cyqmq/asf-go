@@ -134,6 +134,7 @@ STEAM_AUTH=abc123 STEAM_2FA=123456 ./asf --config /path/to/config
 - [x] 自动更新（`!update`，检查 asf-go Release，下载对应平台二进制替换并重启；无 Release 时回退显示上游 ASF 版本）
 - [x] IPC 防暴力破解（连续 5 次认证失败封禁 IP，每小时自动解封，`/api/IPC/Bans` 管理）
 - [x] 通知推送（交易报价 / 好友请求 / 群组邀请主动推送给 Owner）
+- [x] 自动确认（导入移动令牌后每分钟自动确认交易/市场挂单，mobileconf 接口）
 - [x] 库存转移命令（`!transfer <BotName>`，将可转移物品发送给目标 Bot）
 - [x] 关闭所有进行中交易（`!closetrades`，拒绝收到的 + 取消发出的）
 - [x] 修改 Steam 昵称（`!nickname <name>`，通过 go-steam Social.SetPersonaName）

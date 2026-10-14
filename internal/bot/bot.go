@@ -43,8 +43,9 @@ type Bot struct {
 	cardsFarmer *CardsFarmer
 	auth        *authenticator.Authenticator
 
-	tradingStopCh chan struct{}
-	tradingDoneCh chan struct{}
+	tradingStopCh       chan struct{}
+	tradingDoneCh       chan struct{}
+	confirmationsStopCh chan struct{}
 }
 
 // New 创建 Bot 实例。configDir 用于持久化登录 Key。
@@ -116,6 +117,9 @@ func (b *Bot) Start() error {
 	// 启动交易报价处理（若启用）
 	b.startTrading()
 
+	// 启动确认自动处理（若已导入移动令牌）
+	b.startConfirmations()
+
 	b.Log.Info("Bot %s 已就绪", b.Name)
 	return nil
 }
@@ -123,6 +127,10 @@ func (b *Bot) Start() error {
 // Stop 断开 Steam 连接。
 func (b *Bot) Stop() error {
 	b.stopTrading()
+	if b.confirmationsStopCh != nil {
+		close(b.confirmationsStopCh)
+		b.confirmationsStopCh = nil
+	}
 	if b.cardsFarmer != nil {
 		b.cardsFarmer.Stop()
 	}
@@ -191,6 +199,68 @@ func (b *Bot) GetInventory(appID uint32, contextID uint64) (*inventory.Response,
 		return nil, fmt.Errorf("Bot %s SteamID 无效", b.Name)
 	}
 	return inventory.GetOwnInventory(ws, steamID, appID, contextID)
+}
+
+// startConfirmations 启动确认自动处理循环（每分钟一次，需要已导入移动令牌）。
+func (b *Bot) startConfirmations() {
+	if b.auth == nil {
+		return
+	}
+	b.confirmationsStopCh = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				b.processConfirmations()
+			case <-b.confirmationsStopCh:
+				return
+			}
+		}
+	}()
+}
+
+// processConfirmations 查询并自动确认所有待确认项（交易/市场挂单）。
+func (b *Bot) processConfirmations() {
+	if b.steamClient == nil || !b.steamClient.LoggedOn() {
+		return
+	}
+	ws := b.steamClient.WebSessionOrNil()
+	if ws == nil {
+		return
+	}
+	code, err := b.auth.GenerateConfirmationCode("conf")
+	if err != nil {
+		b.Log.Warn("生成确认码失败: %v", err)
+		return
+	}
+	deviceID := b.auth.DeviceID
+	if deviceID == "" {
+		deviceID = "android:asf-go"
+	}
+	now := time.Now().Unix()
+
+	confirmations, err := store.GetConfirmations(ws, b.SteamID(), deviceID, code, now)
+	if err != nil {
+		b.Log.Debug("查询确认列表失败: %v", err)
+		return
+	}
+	if len(confirmations) == 0 {
+		return
+	}
+
+	b.Log.Info("发现 %d 个待确认项，自动确认", len(confirmations))
+	ok, err := store.HandleConfirmations(ws, b.SteamID(), deviceID, code, now, confirmations, true)
+	if err != nil {
+		b.Log.Warn("自动确认失败: %v", err)
+		return
+	}
+	if ok {
+		b.Log.Info("已确认 %d 个待确认项", len(confirmations))
+	} else {
+		b.Log.Warn("Steam 返回确认失败")
+	}
 }
 
 // startTrading 启动交易报价轮询（立即执行一次，之后按 TradingPeriod 小时轮询）。
@@ -1305,9 +1375,9 @@ func (b *Bot) TwoFactorCode() (string, error) {
 	return b.auth.GenerateCode()
 }
 
-// ImportAuthenticator 导入并保存移动令牌（shared_secret / identity_secret）。
-func (b *Bot) ImportAuthenticator(sharedSecret, identitySecret string) error {
-	a, err := authenticator.Import(sharedSecret, identitySecret)
+// ImportAuthenticator 导入并保存移动令牌（shared_secret / identity_secret / 可选 device_id）。
+func (b *Bot) ImportAuthenticator(sharedSecret, identitySecret, deviceID string) error {
+	a, err := authenticator.Import(sharedSecret, identitySecret, deviceID)
 	if err != nil {
 		return err
 	}
