@@ -67,10 +67,10 @@ type GetTradeOffersResponse struct {
 }
 
 // GetTradeOffers 获取交易报价。需要 Steam Web API Key。
-// activeOnly 为 true 时只返回进行中的报价。
-func GetTradeOffers(apiKey string, activeOnly bool) ([]TradeOffer, error) {
+// activeOnly 为 true 时只返回进行中的报价。返回值为（收到的报价，发出的报价）。
+func GetTradeOffers(apiKey string, activeOnly bool) ([]TradeOffer, []TradeOffer, error) {
 	if apiKey == "" {
-		return nil, fmt.Errorf("未配置 Steam Web API Key，无法查询交易报价")
+		return nil, nil, fmt.Errorf("未配置 Steam Web API Key，无法查询交易报价")
 	}
 	form := url.Values{}
 	form.Set("key", apiKey)
@@ -84,18 +84,18 @@ func GetTradeOffers(apiKey string, activeOnly bool) ([]TradeOffer, error) {
 	reqURL := "https://api.steampowered.com/IEconService/GetTradeOffers/v1/?" + form.Encode()
 	resp, err := http.Get(reqURL)
 	if err != nil {
-		return nil, fmt.Errorf("请求交易报价失败: %w", err)
+		return nil, nil, fmt.Errorf("请求交易报价失败: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("交易报价接口返回状态码 %d: %s", resp.StatusCode, string(body))
+		return nil, nil, fmt.Errorf("交易报价接口返回状态码 %d: %s", resp.StatusCode, string(body))
 	}
 	var out GetTradeOffersResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, fmt.Errorf("解析交易报价响应失败: %w", err)
+		return nil, nil, fmt.Errorf("解析交易报价响应失败: %w", err)
 	}
-	return out.Response.TradeOffersReceived, nil
+	return out.Response.TradeOffersReceived, out.Response.TradeOffersSent, nil
 }
 
 // AcceptTradeOffer 接受指定交易报价（需要 Web 会话 Cookie）。
@@ -106,6 +106,11 @@ func AcceptTradeOffer(ws *steam.WebSession, tradeOfferID uint64) error {
 // DeclineTradeOffer 拒绝指定交易报价（需要 Web 会话 Cookie）。
 func DeclineTradeOffer(ws *steam.WebSession, tradeOfferID uint64) error {
 	return sendTradeOfferAction(ws, tradeOfferID, "decline")
+}
+
+// CancelTradeOffer 取消我方发出的指定交易报价（需要 Web 会话 Cookie）。
+func CancelTradeOffer(ws *steam.WebSession, tradeOfferID uint64) error {
+	return sendTradeOfferAction(ws, tradeOfferID, "cancel")
 }
 
 func sendTradeOfferAction(ws *steam.WebSession, tradeOfferID uint64, action string) error {
@@ -145,8 +150,17 @@ func sendTradeOfferAction(ws *steam.WebSession, tradeOfferID uint64, action stri
 	if err := json.Unmarshal(body, &out); err != nil {
 		return fmt.Errorf("%s 交易报价响应解析失败: %s", action, string(body))
 	}
-	if out.Response.TradeOfferState != TradeOfferStateAccepted && out.Response.TradeOfferState != TradeOfferStateInEscrow {
-		return fmt.Errorf("%s 交易报价失败，状态码 %d", action, out.Response.TradeOfferState)
+	switch action {
+	case "accept":
+		if out.Response.TradeOfferState != TradeOfferStateAccepted && out.Response.TradeOfferState != TradeOfferStateInEscrow {
+			return fmt.Errorf("%s 交易报价失败，状态码 %d", action, out.Response.TradeOfferState)
+		}
+	case "decline", "cancel":
+		if out.Response.TradeOfferState != TradeOfferStateCanceled && out.Response.TradeOfferState != TradeOfferStateDeclined {
+			return fmt.Errorf("%s 交易报价失败，状态码 %d", action, out.Response.TradeOfferState)
+		}
+	default:
+		return fmt.Errorf("未知操作 %s", action)
 	}
 	return nil
 }

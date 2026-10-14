@@ -76,7 +76,7 @@ func TestTradeOfferStateConstants(t *testing.T) {
 }
 
 func TestGetTradeOffersNoAPIKey(t *testing.T) {
-	if _, err := GetTradeOffers("", true); err == nil {
+	if _, _, err := GetTradeOffers("", true); err == nil {
 		t.Error("未配置 API Key 时应返回错误")
 	}
 }

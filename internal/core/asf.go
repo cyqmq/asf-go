@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/asf-go/asf/internal/bot"
@@ -24,6 +26,7 @@ type ASF struct {
 	Config     *config.GlobalConfig
 	Log        *logging.Logger
 	Plugins    *plugins.Manager
+	OnExit     func()
 
 	bots map[string]*bot.Bot
 }
@@ -163,6 +166,101 @@ func (a *ASF) Stop() error {
 		}
 	}
 	return a.Log.Close()
+}
+
+// RestartBots 重启所有 Bot 的挂机模块（对应 IPC /api/ASF/Restart）。
+func (a *ASF) RestartBots() {
+	for _, b := range a.bots {
+		b.Pause()
+		b.Resume()
+	}
+}
+
+// Exit 触发 ASF 进程退出（对应 IPC /api/ASF/Exit）。
+func (a *ASF) Exit() {
+	if a.OnExit != nil {
+		a.OnExit()
+	} else {
+		_ = a.Stop()
+	}
+}
+
+// Update 检查 asf-go 自身更新并下载替换重启（对应 IPC /api/ASF/Update）。
+func (a *ASF) Update() (string, error) {
+	client := web.NewGitHubClient()
+	release, err := client.GetLatestRelease("cyqmq", "asf-go", true)
+	if err != nil {
+		upstream, upErr := client.GetLatestRelease("JustArchiNET", "ArchiSteamFarm", true)
+		if upErr != nil {
+			return "", fmt.Errorf("检查更新失败: %w", err)
+		}
+		return fmt.Sprintf("asf-go 暂无 Release，上游 ASF 最新版本: %s", upstream.TagName), nil
+	}
+
+	if web.CompareVersions(release.TagName, Version) <= 0 {
+		return fmt.Sprintf("当前已是最新版本 %s", Version), nil
+	}
+
+	assetName := fmt.Sprintf("asf-go-%s-%s", runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		assetName += ".exe"
+	}
+	var asset *web.GitHubAsset
+	for i := range release.Assets {
+		if release.Assets[i].Name == assetName {
+			asset = &release.Assets[i]
+			break
+		}
+	}
+	if asset == nil {
+		return "", fmt.Errorf("新版本 %s 中未找到当前平台更新包 %s", release.TagName, assetName)
+	}
+
+	a.Log.Info("发现新版本 %s，正在下载 %s ...", release.TagName, asset.Name)
+	tmpFile, err := os.CreateTemp("", "asf-go-update-*")
+	if err != nil {
+		return "", fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+
+	if err := client.DownloadAsset(asset, tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("下载更新包失败: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0o755); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("设置执行权限失败: %w", err)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("定位当前可执行文件失败: %w", err)
+	}
+
+	backupPath := exe + ".old"
+	_ = os.Remove(backupPath)
+	if err := os.Rename(exe, backupPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("备份旧可执行文件失败: %w", err)
+	}
+	if err := os.Rename(tmpPath, exe); err != nil {
+		_ = os.Rename(backupPath, exe)
+		return "", fmt.Errorf("替换可执行文件失败: %w", err)
+	}
+
+	a.Log.Info("更新完成，正在重启 ...")
+	cmd := exec.Command(exe)
+	cmd.Env = os.Environ()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("重启失败: %w", err)
+	}
+
+	a.Exit()
+	return fmt.Sprintf("已更新到 %s，正在重启", release.TagName), nil
 }
 
 // Bots 返回已加载的 Bot 映射。

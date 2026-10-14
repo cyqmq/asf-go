@@ -84,6 +84,9 @@ STEAM_AUTH=abc123 STEAM_2FA=123456 ./asf --config /path/to/config
 | 端点 | 方法 | 说明 |
 |-----|------|------|
 | `/api/ASF` | GET | ASF 状态、版本、Bot 列表 |
+| `/api/ASF/Exit` | POST | ASF 退出 |
+| `/api/ASF/Restart` | POST | 重启所有 Bot |
+| `/api/ASF/Update` | POST | ASF 自动更新 |
 | `/api/bot/{name}` | GET | Bot 状态（连接、挂机游戏） |
 | `/api/bot/{name}/pause` | POST | 暂停挂机 |
 | `/api/bot/{name}/resume` | POST | 恢复挂机 |
@@ -132,6 +135,8 @@ STEAM_AUTH=abc123 STEAM_2FA=123456 ./asf --config /path/to/config
 - [x] IPC 防暴力破解（连续 5 次认证失败封禁 IP，每小时自动解封，`/api/IPC/Bans` 管理）
 - [x] 通知推送（交易报价 / 好友请求 / 群组邀请主动推送给 Owner）
 - [x] 库存转移命令（`!transfer <BotName>`，将可转移物品发送给目标 Bot）
+- [x] 关闭所有进行中交易（`!closetrades`，拒绝收到的 + 取消发出的）
+- [x] 修改 Steam 昵称（`!nickname <name>`，通过 go-steam Social.SetPersonaName）
 - [x] GitHub Actions 多平台发布工作流（打 `v*` tag 自动构建 5 平台二进制并发布 Release，配合 `!update` 自动更新）
 - [x] 游戏标识符解析（`app/`、`sub/`、商店链接、steam:// 链接，复刻原版 TryParseGameIdentifier）
 - [x] 好友请求处理（`AcceptFriendRequests` 自动接受 / `BotBehaviour.RejectInvalidFriendRequests` 拒绝无效请求）

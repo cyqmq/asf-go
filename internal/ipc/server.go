@@ -125,7 +125,32 @@ func validIP(s string) bool {
 	return net.ParseIP(s) != nil
 }
 
-func (s *Server) handleASF(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleASF(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		switch strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/ASF"), "/") {
+		case "Exit":
+			s.asf.Exit()
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "ASF 正在退出"})
+		case "Restart":
+			s.asf.RestartBots()
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "已重启所有 Bot"})
+		case "Update":
+			message, err := s.asf.Update()
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": message})
+		default:
+			writeJSON(w, http.StatusNotFound, map[string]any{"success": false, "message": "未知操作"})
+		}
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"success": false, "message": "仅支持 GET/POST"})
+		return
+	}
+
 	bots := s.asf.Bots()
 	botStatus := make(map[string]any, len(bots))
 	for name, b := range bots {

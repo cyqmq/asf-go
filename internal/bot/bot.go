@@ -279,7 +279,7 @@ func (b *Bot) stopTrading() {
 
 // processTrades 查询并处理收到的交易报价。
 func (b *Bot) processTrades() {
-	offers, err := trading.GetTradeOffers(b.SteamAPIKey, true)
+	offers, _, err := trading.GetTradeOffers(b.SteamAPIKey, true)
 	if err != nil {
 		b.Log.Warn("查询交易报价失败: %v", err)
 		return
@@ -370,6 +370,44 @@ func containsUint64(list []uint64, target uint64) bool {
 		}
 	}
 	return false
+}
+
+// CloseTrades 关闭所有进行中的交易报价（拒绝收到的、取消发出的），返回关闭数量。
+func (b *Bot) CloseTrades() (int, error) {
+	received, sent, err := trading.GetTradeOffers(b.SteamAPIKey, true)
+	if err != nil {
+		return 0, fmt.Errorf("查询交易报价失败: %w", err)
+	}
+
+	ws := b.steamClient.WebSessionOrNil()
+	closed := 0
+	for _, offer := range received {
+		if err := trading.DeclineTradeOffer(ws, offer.TradeOfferID); err != nil {
+			b.Log.Warn("拒绝报价 %d 失败: %v", offer.TradeOfferID, err)
+			continue
+		}
+		closed++
+	}
+	for _, offer := range sent {
+		if err := trading.CancelTradeOffer(ws, offer.TradeOfferID); err != nil {
+			b.Log.Warn("取消报价 %d 失败: %v", offer.TradeOfferID, err)
+			continue
+		}
+		closed++
+	}
+	return closed, nil
+}
+
+// SetNickname 修改本 Bot 的 Steam 昵称。
+func (b *Bot) SetNickname(name string) error {
+	if b.steamClient == nil || !b.steamClient.LoggedOn() {
+		return fmt.Errorf("Bot %s 尚未登录", b.Name)
+	}
+	if name == "" {
+		return fmt.Errorf("昵称不能为空")
+	}
+	b.steamClient.SetPersonaName(name)
+	return nil
 }
 
 // handleFriendRequest 处理收到的好友请求。
@@ -844,7 +882,7 @@ func (b *Bot) handleCommand(chatterID uint64, message string) {
 
 	switch {
 	case lower == "help":
-		reply = "可用命令: status, pause, resume, farm, restart, unpack, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
+		reply = "可用命令: status, pause, resume, farm, restart, unpack, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
 	case lower == "status":
 		if !b.checkAccess(chatterID, config.AccessOperator) {
 			reply = "权限不足"
@@ -1068,6 +1106,28 @@ func (b *Bot) handleCommand(chatterID uint64, message string) {
 			} else {
 				reply = fmt.Sprintf("已向 %s 发送报价 %d", arg, offerID)
 			}
+		}
+	case lower == "closetrades":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		closed, err := b.CloseTrades()
+		if err != nil {
+			reply = fmt.Sprintf("关闭交易失败: %v", err)
+		} else {
+			reply = fmt.Sprintf("已关闭 %d 个交易报价", closed)
+		}
+	case strings.HasPrefix(lower, "nickname "):
+		if !b.checkAccess(chatterID, config.AccessFamilySharing) {
+			reply = "权限不足"
+			break
+		}
+		nickname := strings.TrimSpace(command[len("nickname"):])
+		if err := b.SetNickname(nickname); err != nil {
+			reply = fmt.Sprintf("修改昵称失败: %v", err)
+		} else {
+			reply = fmt.Sprintf("昵称已修改为: %s", nickname)
 		}
 	case strings.HasPrefix(lower, "addlicense") || strings.HasPrefix(lower, "addlicence") || strings.HasPrefix(lower, "al"):
 		if !b.checkAccess(chatterID, config.AccessOperator) {

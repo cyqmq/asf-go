@@ -44,6 +44,18 @@ func main() {
 		}
 	}
 
+	// IPC /api/ASF/Exit 触发时优雅退出
+	asf.OnExit = func() {
+		if ipcSrv != nil {
+			_ = ipcSrv.Stop()
+		}
+		if ipcLog != nil {
+			_ = ipcLog.Close()
+		}
+		_ = asf.Stop()
+		os.Exit(0)
+	}
+
 	// 等待退出信号
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

@@ -238,6 +238,12 @@ func (c *Client) SendChatMessage(to uint64, message string) {
 	c.log.Debug("向 %d 发送消息: %s", to, message)
 }
 
+// SetPersonaName 修改 Steam 昵称。
+func (c *Client) SetPersonaName(name string) {
+	c.inner.Social.SetPersonaName(name)
+	c.log.Debug("修改昵称为: %s", name)
+}
+
 // AcceptFriend 接受好友请求。
 func (c *Client) AcceptFriend(friendID uint64) {
 	c.inner.Social.AddFriend(steamid.SteamId(friendID))
