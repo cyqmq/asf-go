@@ -36,6 +36,7 @@ type GlobalConfig struct {
 	OptimizationMode          string   `json:"OptimizationMode"`
 	PluginsUpdateList         []string `json:"PluginsUpdateList"`
 	PluginsUpdateMode         string   `json:"PluginsUpdateMode"`
+	PluginsDir                string   `json:"PluginsDir"`
 	ShutdownIfPossible        bool     `json:"ShutdownIfPossible"`
 	SteamMessagePrefix        string   `json:"SteamMessagePrefix"`
 	SteamOwnerID              uint64   `json:"SteamOwnerID"`
@@ -69,6 +70,7 @@ func Defaults() *GlobalConfig {
 		OptimizationMode:          "MaxPerformance",
 		PluginsUpdateList:         []string{},
 		PluginsUpdateMode:         "Whitelist",
+		PluginsDir:                "plugins",
 		SteamMessagePrefix:        "/me ",
 		SteamProtocols:            "All",
 		UpdateChannel:             "Stable",

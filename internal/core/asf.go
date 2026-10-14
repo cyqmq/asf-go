@@ -63,9 +63,12 @@ func (a *ASF) Start() error {
 	a.Log.Info("默认 Bot: %s", a.Config.DefaultBot)
 	a.Log.Info("SteamOwnerID: %d", a.Config.SteamOwnerID)
 
-	// 加载插件（含内置示例插件）
+	// 加载插件（含内置示例插件与外部 .so 插件）
 	if err := a.Plugins.LoadAll(); err != nil {
 		return fmt.Errorf("插件加载失败: %w", err)
+	}
+	if err := a.loadExternalPlugins(); err != nil {
+		a.Log.Warn("外部插件加载失败: %v", err)
 	}
 	cfgJSON, _ := json.Marshal(a.Config)
 	if err := a.Plugins.NotifyASFInit(cfgJSON); err != nil {

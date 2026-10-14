@@ -146,14 +146,13 @@ STEAM_AUTH=abc123 STEAM_2FA=123456 ./asf --config /path/to/config
 - [x] GitHub 更新检查（上游版本对比）
 - [x] 本地化（英文/中文文本表）
 - [x] 插件系统（Plugin 接口 + 管理器 + 内置示例插件）
+- [x] 动态插件加载（Go `plugin` 包，`PluginsDir` 配置目录扫描 `.so`，示例见 `examples/plugins/hello`）
 - [x] 多 Bot 支持（扫描配置目录所有 `<BotName>.json`）
 - [x] 单元测试（config、CardsFarmer 解析、IPC、插件、GitHub 版本比较、authenticator、trading、好友策略、Loot 筛选）
 
 ## 待实现（Roadmap）
 
-- [ ] 动态插件加载（Go `plugin` 包，对应 ASF 的插件热加载）
-- [ ] 库存批量转移 / 兑换（`Inventory`、`Exchange` 模块）
-- [ ] 群组/好友通知（主动向 Owner 推送交易、好友事件）
+- [ ] 库存批量兑换（`Exchange` 模块，原版已移除 `!grind`，需自行设计）
 
 ## 许可证
 
