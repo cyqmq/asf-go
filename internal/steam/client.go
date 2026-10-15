@@ -4,13 +4,17 @@ package steam
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sync/atomic"
 	"time"
 
 	"github.com/asf-go/asf/internal/logging"
 	"github.com/cyqmq/go-steam/v3"
+	"github.com/cyqmq/go-steam/v3/protocol"
+	"github.com/cyqmq/go-steam/v3/protocol/protobuf"
 	"github.com/cyqmq/go-steam/v3/protocol/steamlang"
 	"github.com/cyqmq/go-steam/v3/steamid"
+	"google.golang.org/protobuf/proto"
 )
 
 // Client 是对 go-steam Client 的薄封装。
@@ -24,6 +28,9 @@ type Client struct {
 	loginKey string
 	authCode string
 	twoFA    string
+
+	// accessToken 用于 QR 扫码/刷新令牌登录（对应 CMsgClientLogon.access_token 字段）。
+	accessToken string
 
 	onLoginKey      func(string)
 	onChatMessage   func(chatterID uint64, message string)
@@ -82,6 +89,21 @@ func (c *Client) SetTwoFactorCode(code string) {
 	c.twoFA = code
 }
 
+// SetUsername 设置登录账号名（QR 登录在扫码完成后填充）。
+func (c *Client) SetUsername(username string) {
+	c.username = username
+}
+
+// SetAccessToken 设置用于 CM 登录的访问/刷新令牌（QR 登录模式）。
+func (c *Client) SetAccessToken(token string) {
+	c.accessToken = token
+}
+
+// HasAccessToken 返回是否已配置令牌登录。
+func (c *Client) HasAccessToken() bool {
+	return c.accessToken != ""
+}
+
 // Connect 连接 Steam 网络并等待登录完成（带超时）。
 func (c *Client) Connect(timeout time.Duration) error {
 	c.inner.Connect()
@@ -105,6 +127,10 @@ func (c *Client) eventLoop() {
 			switch ev := e.(type) {
 			case *steam.ConnectedEvent:
 				c.log.Debug("已连接到 Steam 网络，开始登录")
+				if c.accessToken != "" {
+					c.LogOnWithAccessToken(c.username, c.accessToken)
+					break
+				}
 				details := &steam.LogOnDetails{
 					Username:               c.username,
 					ShouldRememberPassword: true,
@@ -290,6 +316,69 @@ func (c *Client) Connected() bool {
 // SteamID 返回当前登录账号的 SteamID（未登录时为 0）。
 func (c *Client) SteamID() uint64 {
 	return uint64(c.inner.SteamId())
+}
+
+// rawLogonBody 是自定义 MessageBody，用于发送包含 access_token 字段的 CMsgClientLogon。
+type rawLogonBody struct {
+	data []byte
+}
+
+func (b *rawLogonBody) GetEMsg() steamlang.EMsg {
+	return steamlang.EMsg_ClientLogon
+}
+
+func (b *rawLogonBody) Serialize(w io.Writer) error {
+	_, err := w.Write(b.data)
+	return err
+}
+
+func (b *rawLogonBody) Deserialize(r io.Reader) error {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	b.data = data
+	return nil
+}
+
+// LogOnWithAccessToken 使用访问/刷新令牌登录 CM（对应原版 CMsgClientLogon.access_token）。
+// 适用于 QR 扫码登录等无密码场景。
+func (c *Client) LogOnWithAccessToken(username, accessToken string) {
+	logon := new(protobuf.CMsgClientLogon)
+	logon.AccountName = proto.String(username)
+	logon.ClientLanguage = proto.String("english")
+	logon.ProtocolVersion = proto.Uint32(steamlang.MsgClientLogon_CurrentProtocol)
+	logon.MachineName = proto.String("asf-go")
+	logon.ShouldRememberPassword = proto.Bool(false)
+
+	data, err := proto.Marshal(logon)
+	if err != nil {
+		c.log.Error("构造登录消息失败: %v", err)
+		return
+	}
+
+	// CMsgClientLogon.access_token 字段号为 108（protobuf wire type 2）。
+	data = appendProtoString(data, 108, accessToken)
+
+	c.inner.Write(protocol.NewClientMsg(&rawLogonBody{data: data}, nil))
+	c.username = username
+}
+
+// appendProtoString 向 protobuf 字节追加一个 string 字段。
+func appendProtoString(b []byte, fieldNum int, s string) []byte {
+	key := uint64(fieldNum<<3 | 2)
+	b = appendVarint(b, key)
+	b = appendVarint(b, uint64(len(s)))
+	return append(b, s...)
+}
+
+// appendVarint 编码 protobuf varint。
+func appendVarint(b []byte, v uint64) []byte {
+	for v >= 0x80 {
+		b = append(b, byte(v)|0x80)
+		v >>= 7
+	}
+	return append(b, byte(v))
 }
 
 // String 实现 fmt.Stringer。

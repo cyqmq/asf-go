@@ -46,6 +46,11 @@ type Bot struct {
 	tradingStopCh       chan struct{}
 	tradingDoneCh       chan struct{}
 	confirmationsStopCh chan struct{}
+
+	// QR 扫码登录相关
+	qrSession      *steam.QRLoginSession
+	qrChallengeURL string
+	qrStopCh       chan struct{}
 }
 
 // New 创建 Bot 实例。configDir 用于持久化登录 Key。
@@ -73,7 +78,8 @@ func (b *Bot) Start() error {
 		return nil
 	}
 	if b.Config.SteamLogin == "" {
-		return fmt.Errorf("Bot %s 未配置 SteamLogin", b.Name)
+		// 未配置账号名：使用 QR 扫码登录（对应原版 WantsQrCodeLogin）。
+		return b.startQRLogin()
 	}
 
 	client := steam.NewClient(b.Log, b.Config.SteamLogin, b.Config.SteamPassword, b.loginKey)
@@ -105,8 +111,79 @@ func (b *Bot) Start() error {
 		return fmt.Errorf("Bot %s 连接失败: %w", b.Name, err)
 	}
 
+	b.finishStartup()
+	b.Log.Info("Bot %s 已就绪", b.Name)
+	return nil
+}
+
+// startQRLogin 启动 QR 扫码登录：创建 Web QR 会话并暴露 challenge URL，
+// 后台轮询扫码状态，确认后自动连接 CM 并登录。
+func (b *Bot) startQRLogin() error {
+	client := steam.NewClient(b.Log, "", "", "")
+	client.SetOnLoginKey(func(key string) {
+		b.loginKey = key
+		b.saveLoginKey()
+	})
+	client.SetOnChatMessage(b.handleCommand)
+	client.SetOnFriendRequest(b.handleFriendRequest)
+	client.SetOnChatInvite(b.handleChatInvite)
+	b.steamClient = client
+
+	session, challengeURL, err := steam.StartQRLogin(nil)
+	if err != nil {
+		b.Log.Error("启动 QR 登录失败: %v", err)
+		return fmt.Errorf("Bot %s 启动 QR 登录失败: %w", b.Name, err)
+	}
+	b.qrSession = session
+	b.qrChallengeURL = challengeURL
+	b.qrStopCh = make(chan struct{})
+	b.Log.Info("QR 登录已启动，等待扫码: %s", challengeURL)
+
+	go b.pollQRLogin()
+	return nil
+}
+
+// pollQRLogin 轮询 QR 扫码状态，完成后用令牌登录。
+func (b *Bot) pollQRLogin() {
+	interval := time.Duration(b.qrSession.Interval) * time.Second
+	if interval < 5*time.Second {
+		interval = 5 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-b.qrStopCh:
+			return
+		case <-ticker.C:
+			done, err := b.qrSession.Poll()
+			if err != nil {
+				b.Log.Debug("QR 轮询失败: %v", err)
+				continue
+			}
+			if !done {
+				continue
+			}
+			b.Log.Info("QR 扫码已确认，账号 %s，开始登录", b.qrSession.AccountName)
+			b.steamClient.SetUsername(b.qrSession.AccountName)
+			b.steamClient.SetAccessToken(b.qrSession.LoginToken())
+			b.qrChallengeURL = ""
+			if err := b.steamClient.Connect(90 * time.Second); err != nil {
+				b.Log.Error("Bot %s 连接失败: %v", b.Name, err)
+				return
+			}
+			b.finishStartup()
+			b.Log.Info("Bot %s 已就绪", b.Name)
+			return
+		}
+	}
+}
+
+// finishStartup 在登录成功后初始化 Web 会话、挂卡、交易与确认模块。
+func (b *Bot) finishStartup() {
 	// 初始化 Web 会话（卡牌挂机需要）
-	if err := client.InitWebSession(); err != nil {
+	if err := b.steamClient.InitWebSession(); err != nil {
 		b.Log.Warn("Web 会话初始化失败: %v", err)
 	}
 
@@ -119,13 +196,25 @@ func (b *Bot) Start() error {
 
 	// 启动确认自动处理（若已导入移动令牌）
 	b.startConfirmations()
+}
 
-	b.Log.Info("Bot %s 已就绪", b.Name)
-	return nil
+// QRChallengeURL 返回当前 QR 登录挑战 URL（未启动 QR 登录时为空）。
+func (b *Bot) QRChallengeURL() string {
+	return b.qrChallengeURL
+}
+
+// CancelQRLogin 取消正在进行的 QR 登录轮询。
+func (b *Bot) CancelQRLogin() {
+	if b.qrStopCh != nil {
+		close(b.qrStopCh)
+		b.qrStopCh = nil
+	}
+	b.qrChallengeURL = ""
 }
 
 // Stop 断开 Steam 连接。
 func (b *Bot) Stop() error {
+	b.CancelQRLogin()
 	b.stopTrading()
 	if b.confirmationsStopCh != nil {
 		close(b.confirmationsStopCh)

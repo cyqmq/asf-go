@@ -1348,6 +1348,11 @@ func botStatusMap(b *bot.Bot) map[string]any {
 		"TimeRemaining":       "00:00:00",
 		"CurrentGamesFarming": games,
 	}
+	qrURL := b.QRChallengeURL()
+	requiredInput := 0
+	if qrURL != "" {
+		requiredInput = 8 // ASF.EUserInputType.QrCodeLogin
+	}
 	return map[string]any{
 		// 原版字段（ASF-ui 依赖这些键名判断在线/挂卡状态）
 		"BotName":                        b.Name,
@@ -1363,8 +1368,8 @@ func botStatusMap(b *bot.Bot) map[string]any {
 		"BotConfig":                      b.Config,
 		"KeepRunning":                    b.Config.Enabled,
 		"Nickname":                       nil,
-		"QrChallengeURL":                 nil,
-		"RequiredInput":                  0,
+		"QrChallengeURL":                 qrURL,
+		"RequiredInput":                  requiredInput,
 		"SteamID":                        b.SteamID(),
 		"WalletBalance":                  0,
 		"WalletBalanceDelayed":           0,
