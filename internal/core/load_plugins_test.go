@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"testing"
 )
 
@@ -12,7 +13,13 @@ func TestLoadExternalPlugin(t *testing.T) {
 
 	soDir := t.TempDir()
 	soPath := filepath.Join(soDir, "hello.so")
-	cmd := exec.Command("go", "build", "-buildmode=plugin", "-o", soPath, "./examples/plugins/hello")
+	// Go plugin 要求与宿主运行时一致：测试二进制以 -race 构建时，插件也必须用 -race 构建。
+	args := []string{"build"}
+	if raceEnabled(t) {
+		args = append(args, "-race")
+	}
+	args = append(args, "-buildmode=plugin", "-o", soPath, "./examples/plugins/hello")
+	cmd := exec.Command("go", args...)
 	cmd.Dir = repoRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("编译示例插件失败: %v\n%s", err, out)
@@ -60,4 +67,19 @@ func findRepoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
+}
+
+// raceEnabled 返回当前测试二进制是否以 -race 构建。
+func raceEnabled(t *testing.T) bool {
+	t.Helper()
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return false
+	}
+	for _, s := range bi.Settings {
+		if s.Key == "-race" && s.Value == "true" {
+			return true
+		}
+	}
+	return false
 }

@@ -19,7 +19,7 @@ import (
 )
 
 // Version 对应 ASF 版本信息（后续可自动获取）。
-const Version = "0.1.0-go"
+const Version = "0.5.0"
 
 // ASF 核心对象，负责配置加载、日志与生命周期。
 type ASF struct {
