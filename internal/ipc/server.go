@@ -63,15 +63,23 @@ func (s *Server) Start(addr string) error {
 	apiMux.HandleFunc("/api/asf", s.auth(s.handleASF))
 	apiMux.HandleFunc("/api/asf/", s.auth(s.handleASF))
 	apiMux.HandleFunc("/api/bot/", s.auth(s.handleBot))
+	apiMux.HandleFunc("/api/bots", s.auth(s.handleBots))
+	apiMux.HandleFunc("/api/bots/", s.auth(s.handleBots))
 	apiMux.HandleFunc("/api/commands", s.auth(s.handleCommands))
+	apiMux.HandleFunc("/api/command", s.auth(s.handleCommands))
 	apiMux.HandleFunc("/api/ipc/bans", s.auth(s.handleIPCBans))
+	apiMux.HandleFunc("/api/asf-bans", s.auth(s.handleIPCBans))
+	apiMux.HandleFunc("/api/asf-bans/", s.auth(s.handleIPCBans))
+	apiMux.HandleFunc("/api/nlog/", s.auth(s.handleNLog))
+	apiMux.HandleFunc("/api/log", s.auth(s.handleNLog))
+	apiMux.HandleFunc("/api/www/github/release", s.auth(s.handleGitHubRelease))
+	apiMux.HandleFunc("/api/www/github/release/", s.auth(s.handleGitHubRelease))
+	apiMux.HandleFunc("/api/releases", s.auth(s.handleGitHubRelease))
+	apiMux.HandleFunc("/api/releases/", s.auth(s.handleGitHubRelease))
 	apiMux.HandleFunc("/api/type", s.auth(s.handleType))
 	apiMux.HandleFunc("/api/structure", s.auth(s.handleStructure))
 	apiMux.HandleFunc("/api/storage/", s.auth(s.handleStorage))
 	apiMux.HandleFunc("/api/plugins", s.auth(s.handlePlugins))
-	apiMux.HandleFunc("/api/nlog/", s.auth(s.handleNLog))
-	apiMux.HandleFunc("/api/www/github/release", s.auth(s.handleGitHubRelease))
-	apiMux.HandleFunc("/api/www/github/release/", s.auth(s.handleGitHubRelease))
 	apiMux.HandleFunc("/api/", s.auth(s.handleAPI404))
 
 	mux := http.NewServeMux()
@@ -189,6 +197,27 @@ func (s *Server) handleIPCBans(w http.ResponseWriter, r *http.Request) {
 		}
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "方法不允许"})
+	}
+}
+
+// currencyCodes 返回常见 Steam 货币代码（对应原版 ECurrencyCode 枚举的简化版）。
+func currencyCodes() map[string]string {
+	return map[string]string{
+		"USD": "US Dollar",
+		"EUR": "Euro",
+		"GBP": "British Pound",
+		"CNY": "Chinese Yuan",
+		"JPY": "Japanese Yen",
+		"KRW": "South Korean Won",
+		"RUB": "Russian Ruble",
+		"BRL": "Brazilian Real",
+		"CAD": "Canadian Dollar",
+		"AUD": "Australian Dollar",
+		"INR": "Indian Rupee",
+		"TRY": "Turkish Lira",
+		"UAH": "Ukrainian Hryvnia",
+		"PLN": "Polish Zloty",
+		"CHF": "Swiss Franc",
 	}
 }
 
@@ -488,6 +517,16 @@ func (s *Server) handleASF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sub := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/asf"), "/")
+	switch sub {
+	case "currencycodes":
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{"CurrencyCodes": currencyCodes()}})
+		return
+	case "updatesenabled":
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{"UpdatesEnabled": true}})
+		return
+	}
+
 	bots := s.asf.Bots()
 	botStatus := make(map[string]any, len(bots))
 	for name, b := range bots {
@@ -574,6 +613,14 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 			b.Pause()
 			b.Resume()
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已开始挂机"})
+		case "get status":
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": botStatusMap(b)})
+		case "post start":
+			b.Resume()
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已启动"})
+		case "post stop":
+			b.Pause()
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已停止"})
 		case "get gamestofarm":
 			games := b.FarmingGames()
 			list := make([]map[string]any, 0, len(games))
@@ -837,6 +884,36 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": botStatusMap(b)})
+}
+
+// handleBots 返回机器人列表/统计（兼容 ASF-ui 与第三方工具的 /api/bots 系列路径）。
+func (s *Server) handleBots(w http.ResponseWriter, r *http.Request) {
+	bots := s.asf.Bots()
+	sub := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/bots"), "/")
+
+	switch sub {
+	case "", "bots", "detectbots":
+		result := make([]map[string]any, 0, len(bots))
+		for name, b := range bots {
+			result = append(result, map[string]any{
+				"name":   name,
+				"status": botStatusMap(b),
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": result})
+	case "count":
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": len(bots)})
+	case "botsfarmingcount":
+		count := 0
+		for _, b := range bots {
+			if b.IsFarming() {
+				count++
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": count})
+	default:
+		writeJSON(w, http.StatusNotFound, map[string]any{"Success": false, "Message": "未知操作"})
+	}
 }
 
 func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {

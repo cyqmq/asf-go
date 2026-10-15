@@ -124,6 +124,10 @@ func (a *ASF) loadBots() error {
 		if strings.EqualFold(entry.Name(), "ASF.json") {
 			continue
 		}
+		// 跳过移动令牌文件（<BotName>.maFile.json），避免被误识别为 Bot
+		if strings.Contains(entry.Name(), ".maFile.json") {
+			continue
+		}
 		botName := strings.TrimSuffix(entry.Name(), ".json")
 		botPath := filepath.Join(a.ConfigPath, entry.Name())
 		cfg, err := config.LoadBotConfig(botPath)
