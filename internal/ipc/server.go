@@ -3,12 +3,7 @@ package ipc
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -228,42 +223,41 @@ func validIP(s string) bool {
 }
 
 // encryptString 对应原版 ArchiCryptoHelper 加密工具（简化实现：PlainText 返回原文，AES 用 AES-GCM）。
+// encryptString 对应原版 Actions.Encrypt。
+// CryptoMethod 枚举：0=PlainText 1=AES 2=ProtectedDataForCurrentUser 3=EnvironmentVariable 4=File。
 func encryptString(method int, s string) string {
-	if s == "" {
-		return ""
-	}
 	switch method {
 	case 1: // AES
-		key := sha256.Sum256([]byte("asf-go-ipc-encryption-key"))
-		block, err := aes.NewCipher(key[:])
+		out, err := encryptAES(s)
 		if err != nil {
 			return s
 		}
-		gcm, err := cipher.NewGCM(block)
-		if err != nil {
-			return s
-		}
-		nonce := make([]byte, gcm.NonceSize())
-		if _, err := rand.Read(nonce); err != nil {
-			return s
-		}
-		return base64.StdEncoding.EncodeToString(gcm.Seal(nonce, nonce, []byte(s), nil))
+		return out
+	case 3: // EnvironmentVariable：原版返回环境变量值（不转换）
+		return s
+	case 4: // File：原版读取文件内容（出于安全考虑本实现不读取任意文件）
+		return s
 	default: // PlainText 及其他
 		return s
 	}
 }
 
-// hashString 对应原版 ArchiCryptoHelper 哈希工具（简化实现：非 PlainText 用 SHA256）。
+// hashString 对应原版 Actions.Hash。
+// HashingMethod 枚举：0=PlainText 1=SCrypt 2=Pbkdf2。
 func hashString(method int, s string) string {
-	if s == "" {
-		return ""
-	}
 	switch method {
 	case 0: // PlainText
 		return s
-	default: // SCrypt / Pbkdf2：用 SHA256 简化
-		sum := sha256.Sum256([]byte(s))
-		return base64.StdEncoding.EncodeToString(sum[:])
+	case 1: // SCrypt
+		out, err := hashSCrypt(s)
+		if err != nil {
+			return ""
+		}
+		return out
+	case 2: // Pbkdf2
+		return hashPBKDF2(s)
+	default:
+		return s
 	}
 }
 
@@ -481,6 +475,21 @@ func (s *Server) handleASF(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "无效请求"})
 				return
 			}
+			if req.StringToEncrypt == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "StringToEncrypt 不能为空"})
+				return
+			}
+			switch req.CryptoMethod {
+			case 2: // ProtectedDataForCurrentUser：仅 Windows 支持
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "当前平台不支持 ProtectedDataForCurrentUser"})
+				return
+			case 3: // EnvironmentVariable：返回环境变量值
+				writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": os.Getenv(req.StringToEncrypt)})
+				return
+			case 4: // File：出于安全考虑不支持读取任意文件
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "暂不支持 File 加密方式"})
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": encryptString(req.CryptoMethod, req.StringToEncrypt)})
 		case "hash":
 			var req struct {
@@ -489,6 +498,10 @@ func (s *Server) handleASF(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "无效请求"})
+				return
+			}
+			if req.StringToHash == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "StringToHash 不能为空"})
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": hashString(req.HashingMethod, req.StringToHash)})
@@ -691,6 +704,22 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已开始挂机"})
 		case "get status":
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": botStatusMap(b)})
+		case "get twofactorauthentication/confirmations":
+			confirmations, err := b.GetConfirmations()
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": err.Error()})
+				return
+			}
+			list := make([]map[string]any, 0, len(confirmations))
+			for _, c := range confirmations {
+				list = append(list, map[string]any{
+					"ID":        uint64(c.ID),
+					"Nonce":     uint64(c.Nonce),
+					"Type":      c.Type,
+					"CreatorID": uint64(c.CreatorID),
+				})
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": list})
 		case "post start":
 			b.Resume()
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已启动"})
@@ -875,7 +904,7 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			var req struct {
-				Accept bool `json:"accept"`
+				Accept bool `json:"Accept"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "无效请求"})
@@ -905,12 +934,25 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": err.Error()})
 				return
 			}
+			if len(confirmations) == 0 {
+				writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "没有待确认项", "Result": []any{}})
+				return
+			}
 			ok, err := store.HandleConfirmations(ws, b.SteamID(), deviceID, code, now, confirmations, req.Accept)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"Success": ok, "Message": "已处理确认"})
+			list := make([]map[string]any, 0, len(confirmations))
+			for _, c := range confirmations {
+				list = append(list, map[string]any{
+					"ID":        uint64(c.ID),
+					"Nonce":     uint64(c.Nonce),
+					"Type":      c.Type,
+					"CreatorID": uint64(c.CreatorID),
+				})
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"Success": ok, "Message": "已处理确认", "Result": list})
 		case "post mafile":
 			var req struct {
 				SharedSecret   string `json:"shared_secret"`
@@ -1022,6 +1064,30 @@ func (s *Server) handleBots(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// resolveCommandBot 解析原版命令的"目标 bot"：第二个 token 若匹配已知 bot 则使用之，
+// 否则回退到全局配置的 DefaultBot（再退化为第一个启用的 bot）。
+func (s *Server) resolveCommandBot(fields []string) (*bot.Bot, int) {
+	if len(fields) >= 2 {
+		if b, ok := s.asf.Bots()[fields[1]]; ok {
+			return b, 2
+		}
+	}
+	if s.asf.Config.DefaultBot != "" {
+		if b, ok := s.asf.Bots()[s.asf.Config.DefaultBot]; ok {
+			return b, 1
+		}
+	}
+	for _, b := range s.asf.Bots() {
+		if b.Config.Enabled {
+			return b, 1
+		}
+	}
+	for _, b := range s.asf.Bots() {
+		return b, 1
+	}
+	return nil, 1
+}
+
 func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "仅支持 POST"})
@@ -1035,23 +1101,235 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := strings.TrimSpace(req.Command)
-	switch strings.ToLower(cmd) {
-	case "status":
-		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": s.asfStatus()})
+	prefix := s.asf.Config.CommandPrefix
+	if prefix == "" {
+		prefix = "!"
+	}
+	if strings.HasPrefix(cmd, prefix) {
+		cmd = strings.TrimSpace(strings.TrimPrefix(cmd, prefix))
+	}
+	if cmd == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "命令不能为空"})
+		return
+	}
+
+	fields := strings.Fields(cmd)
+	lower := strings.ToLower(fields[0])
+	respond := func(success bool, message string) {
+		writeJSON(w, http.StatusOK, map[string]any{"Success": success, "Message": message, "Result": message})
+	}
+
+	switch lower {
+	case "help":
+		respond(true, "可用命令: status, pause, resume, farm, restart, reset, redeem, addlicense, owns, play, nickname, level, points, games, 2fa, confirmations, update, exit, help")
+	case "status", "sa":
+		if len(fields) >= 2 && strings.EqualFold(fields[1], "ASF") {
+			st := s.asfStatus()
+			respond(true, fmt.Sprintf("ASF %s | Bot 数: %d", st["version"], st["bots"]))
+			return
+		}
+		if len(fields) >= 2 {
+			if b, ok := s.asf.Bots()[fields[1]]; ok {
+				writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": botStatusMap(b)})
+				return
+			}
+		}
+		result := make(map[string]any)
+		lines := make([]string, 0, len(s.asf.Bots()))
+		for name, b := range s.asf.Bots() {
+			result[name] = botStatusMap(b)
+			lines = append(lines, b.String())
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": result, "Message": strings.Join(lines, "\n")})
 	case "pause":
-		for _, b := range s.asf.Bots() {
-			b.Pause()
+		b, idx := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": "全部暂停"})
+		_ = idx
+		b.Pause()
+		respond(true, fmt.Sprintf("Bot %s 已暂停", b.Name))
 	case "resume":
-		for _, b := range s.asf.Bots() {
-			b.Resume()
+		b, _ := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": "全部恢复"})
+		b.Resume()
+		respond(true, fmt.Sprintf("Bot %s 已恢复", b.Name))
+	case "farm":
+		b, _ := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		b.Resume()
+		respond(true, fmt.Sprintf("Bot %s 已开始挂机", b.Name))
+	case "restart", "reset":
+		b, _ := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		b.Pause()
+		b.Resume()
+		respond(true, fmt.Sprintf("Bot %s 已重启", b.Name))
+	case "redeem":
+		b, start := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		if start >= len(fields) {
+			respond(false, "用法: redeem <Bot> <Key> [Key2] ...")
+			return
+		}
+		keys := fields[start:]
+		msg, err := b.Redeem(keys)
+		if err != nil {
+			respond(false, err.Error())
+			return
+		}
+		respond(true, msg)
+	case "addlicense":
+		b, start := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		if start >= len(fields) {
+			respond(false, "用法: addlicense <Bot> <SubID>")
+			return
+		}
+		msg, err := b.AddLicense(fields[start])
+		if err != nil {
+			respond(false, err.Error())
+			return
+		}
+		respond(true, msg)
+	case "owns":
+		b, start := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		if start >= len(fields) {
+			respond(false, "用法: owns <Bot> <AppID>")
+			return
+		}
+		msg, err := b.Owns(fields[start:])
+		if err != nil {
+			respond(false, err.Error())
+			return
+		}
+		respond(true, msg)
+	case "play":
+		b, start := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		if start >= len(fields) {
+			respond(false, "用法: play <Bot> <AppID>")
+			return
+		}
+		respond(false, "暂不支持 play 命令")
+	case "nickname":
+		b, start := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		if start >= len(fields) {
+			respond(false, "用法: nickname <Bot> <昵称>")
+			return
+		}
+		nickname := strings.Join(fields[start:], " ")
+		if err := b.SetNickname(nickname); err != nil {
+			respond(false, err.Error())
+			return
+		}
+		respond(true, fmt.Sprintf("Bot %s 昵称已修改", b.Name))
+	case "level":
+		b, _ := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		level, err := b.SteamLevel()
+		if err != nil {
+			respond(false, fmt.Sprintf("查询等级失败: %v", err))
+			return
+		}
+		respond(true, fmt.Sprintf("Bot %s 的 Steam 等级: %d", b.Name, level))
+	case "points", "balance":
+		b, _ := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		points, err := b.PointsBalance()
+		if err != nil {
+			respond(false, fmt.Sprintf("查询积分失败: %v", err))
+			return
+		}
+		respond(true, fmt.Sprintf("Bot %s 的 Steam 积分: %d", b.Name, points))
+	case "games":
+		b, _ := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		games := b.FarmingGames()
+		if len(games) == 0 {
+			respond(true, fmt.Sprintf("Bot %s 当前无挂机游戏", b.Name))
+			return
+		}
+		lines := make([]string, 0, len(games))
+		for _, g := range games {
+			lines = append(lines, fmt.Sprintf("%s (%d): %d 张卡", g.Name, g.AppID, g.CardsRemaining))
+		}
+		respond(true, strings.Join(lines, "\n"))
+	case "2fa":
+		b, _ := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		code, err := b.TwoFactorCode()
+		if err != nil {
+			respond(false, err.Error())
+			return
+		}
+		respond(true, fmt.Sprintf("Bot %s 的 2FA 代码: %s", b.Name, code))
+	case "confirmations":
+		b, _ := s.resolveCommandBot(fields)
+		if b == nil {
+			respond(false, "没有可用 Bot")
+			return
+		}
+		confirmations, err := b.GetConfirmations()
+		if err != nil {
+			respond(false, err.Error())
+			return
+		}
+		if len(confirmations) == 0 {
+			respond(true, fmt.Sprintf("Bot %s 无待确认项", b.Name))
+			return
+		}
+		respond(true, fmt.Sprintf("Bot %s 有 %d 个待确认项", b.Name, len(confirmations)))
+	case "update":
+		message, err := s.asf.Update()
+		if err != nil {
+			respond(false, err.Error())
+			return
+		}
+		respond(true, message)
 	case "exit":
-		writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "已禁止远程退出，请在服务器上管理 ASF 进程"})
+		respond(false, "已禁止远程退出，请在服务器上管理 ASF 进程")
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "未知命令"})
+		respond(false, "未知命令: "+fields[0])
 	}
 }
 
@@ -1059,22 +1337,46 @@ func botStatusMap(b *bot.Bot) map[string]any {
 	games := make([]map[string]any, 0)
 	for _, g := range b.FarmingGames() {
 		games = append(games, map[string]any{
-			"appID":          g.AppID,
-			"gameName":       g.Name,
-			"cardsRemaining": g.CardsRemaining,
+			"AppID":          g.AppID,
+			"GameName":       g.Name,
+			"CardsRemaining": g.CardsRemaining,
 		})
 	}
+	cardsFarmer := map[string]any{
+		"Paused":              !b.IsFarming(),
+		"GamesToFarm":         games,
+		"TimeRemaining":       "00:00:00",
+		"CurrentGamesFarming": games,
+	}
 	return map[string]any{
-		"name":         b.Name,
-		"connected":    b.IsConnected(),
-		"enabled":      b.Config.Enabled,
-		"onlineStatus": b.Config.OnlineStatus,
-		"steamLogin":   b.Config.SteamLogin,
-		"gamesToFarm":  games,
-		"cardsFarmer": map[string]any{
-			"currentGamesFarming": games,
-			"paused":              !b.IsFarming(),
-		},
+		// 原版字段（ASF-ui 依赖这些键名判断在线/挂卡状态）
+		"BotName":                        b.Name,
+		"CardsFarmer":                    cardsFarmer,
+		"GamesToRedeemInBackgroundCount": 0,
+		"HasMobileAuthenticator":         b.HasAuthenticator(),
+		"IsConnectedAndLoggedOn":         b.IsConnected(),
+		"IsPlayingPossible":              b.IsConnected(),
+		"PublicIP":                       nil,
+		"s_SteamID":                      strconv.FormatUint(b.SteamID(), 10),
+		"AccountFlags":                   0,
+		"AvatarHash":                     nil,
+		"BotConfig":                      b.Config,
+		"KeepRunning":                    b.Config.Enabled,
+		"Nickname":                       nil,
+		"QrChallengeURL":                 nil,
+		"RequiredInput":                  0,
+		"SteamID":                        b.SteamID(),
+		"WalletBalance":                  0,
+		"WalletBalanceDelayed":           0,
+		"WalletCurrency":                 nil,
+		// 兼容旧字段（历史消费者可能仍在使用）
+		"name":             b.Name,
+		"connected":        b.IsConnected(),
+		"enabled":          b.Config.Enabled,
+		"onlineStatus":     b.Config.OnlineStatus,
+		"steamLogin":       b.Config.SteamLogin,
+		"gamesToFarm":      games,
+		"cardsFarmer":      cardsFarmer,
 		"farmingBlacklist": b.Config.FarmingBlacklist,
 		"farmingQueue":     b.Config.FarmingQueue,
 		"access":           "None",

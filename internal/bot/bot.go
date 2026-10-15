@@ -271,6 +271,56 @@ func (b *Bot) processConfirmations() {
 	}
 }
 
+// GetConfirmations 查询当前待确认列表（需要已登录且配置了移动验证器）。
+func (b *Bot) GetConfirmations() ([]store.Confirmation, error) {
+	if b.steamClient == nil || !b.steamClient.LoggedOn() {
+		return nil, fmt.Errorf("Bot %s 尚未登录", b.Name)
+	}
+	if b.auth == nil {
+		return nil, fmt.Errorf("Bot %s 未配置移动验证器", b.Name)
+	}
+	ws := b.steamClient.WebSessionOrNil()
+	if ws == nil {
+		return nil, fmt.Errorf("Bot %s 无 Web 会话", b.Name)
+	}
+	code, err := b.auth.GenerateConfirmationCode("conf")
+	if err != nil {
+		return nil, fmt.Errorf("生成确认码失败: %w", err)
+	}
+	deviceID := b.auth.DeviceID
+	if deviceID == "" {
+		deviceID = "android:asf-go"
+	}
+	confirmations, err := store.GetConfirmations(ws, b.SteamID(), deviceID, code, time.Now().Unix())
+	if err != nil {
+		return nil, err
+	}
+	return confirmations, nil
+}
+
+// HandleConfirmations 接受或拒绝指定的确认项。
+func (b *Bot) HandleConfirmations(accept bool, confirmations []store.Confirmation) (bool, error) {
+	if b.steamClient == nil || !b.steamClient.LoggedOn() {
+		return false, fmt.Errorf("Bot %s 尚未登录", b.Name)
+	}
+	if b.auth == nil {
+		return false, fmt.Errorf("Bot %s 未配置移动验证器", b.Name)
+	}
+	ws := b.steamClient.WebSessionOrNil()
+	if ws == nil {
+		return false, fmt.Errorf("Bot %s 无 Web 会话", b.Name)
+	}
+	code, err := b.auth.GenerateConfirmationCode("conf")
+	if err != nil {
+		return false, fmt.Errorf("生成确认码失败: %w", err)
+	}
+	deviceID := b.auth.DeviceID
+	if deviceID == "" {
+		deviceID = "android:asf-go"
+	}
+	return store.HandleConfirmations(ws, b.SteamID(), deviceID, code, time.Now().Unix(), confirmations, accept)
+}
+
 // startTrading 启动交易报价轮询（立即执行一次，之后按 TradingPeriod 小时轮询）。
 func (b *Bot) startTrading() {
 	if !b.Config.Trading {
