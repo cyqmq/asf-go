@@ -453,16 +453,21 @@ func (s *Server) handleASF(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": hashString(req.HashingMethod, req.StringToHash)})
-		case "exit", "restart", "update":
-			// 危险操作保护：未设置 IPC 密码时禁止远程执行（避免误关服务）
+		case "exit":
+			// 始终禁止远程退出（避免误关服务），请通过系统服务管理进程
+			writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "已禁止远程退出，请在服务器上管理 ASF 进程"})
+		case "restart", "update":
+			// 危险操作保护：未设置 IPC 密码时禁止远程执行
 			if s.password == "" {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "未设置 IPC 密码，禁止远程执行该操作"})
 				return
 			}
-			if action == "exit" {
-				s.asf.Exit()
-				writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "ASF 正在退出"})
-			} else if action == "restart" {
+			// 二次确认保护：需要 X-ASF-Confirm: true 请求头
+			if r.Header.Get("X-ASF-Confirm") != "true" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "需要确认头 X-ASF-Confirm: true 才能执行该操作"})
+				return
+			}
+			if action == "restart" {
 				s.asf.RestartBots()
 				writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已重启所有 Bot"})
 			} else {
