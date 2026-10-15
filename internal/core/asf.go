@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/asf-go/asf/internal/bot"
 	"github.com/asf-go/asf/internal/config"
@@ -28,7 +29,8 @@ type ASF struct {
 	Plugins    *plugins.Manager
 	OnExit     func()
 
-	bots map[string]*bot.Bot
+	startTime time.Time
+	bots      map[string]*bot.Bot
 }
 
 // New 创建 ASF 核心实例并加载配置。
@@ -50,6 +52,7 @@ func New(configPath string) (*ASF, error) {
 		Config:     cfg,
 		Log:        log,
 		Plugins:    plugins.NewManager(),
+		startTime:  time.Now(),
 		bots:       map[string]*bot.Bot{},
 	}
 	asf.registerBuiltinPlugins()
@@ -158,6 +161,36 @@ func (a *ASF) loadBots() error {
 		a.Log.Info("已加载 Bot 配置: %s (启用=%v)", botName, cfg.Enabled)
 	}
 	return nil
+}
+
+// StartTime 返回 ASF 进程启动时间。
+func (a *ASF) StartTime() time.Time {
+	return a.startTime
+}
+
+// UpdateGlobalConfig 更新全局配置并保存到 ASF.json（对应 IPC POST /api/ASF）。
+func (a *ASF) UpdateGlobalConfig(cfg *config.GlobalConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("全局配置为空")
+	}
+	a.Config = cfg
+	return cfg.Save(filepath.Join(a.ConfigPath, "ASF.json"))
+}
+
+// UpdateBotConfig 更新指定 Bot 的配置并保存（对应 IPC POST /api/Bot/{name}）。
+func (a *ASF) UpdateBotConfig(botName string, cfg *config.BotConfig) error {
+	if botName == "" {
+		return fmt.Errorf("Bot 名称为空")
+	}
+	if cfg == nil {
+		return fmt.Errorf("Bot 配置为空")
+	}
+	b, ok := a.bots[botName]
+	if !ok {
+		return fmt.Errorf("Bot %s 不存在", botName)
+	}
+	b.Config = cfg
+	return cfg.Save(filepath.Join(a.ConfigPath, botName+".json"))
 }
 
 // Stop 停止所有 Bot 并关闭日志。

@@ -69,17 +69,17 @@ func TestASFEndpoint(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body["success"] != true {
+	if body["Success"] != true {
 		t.Errorf("success 应为 true")
 	}
-	result, ok := body["result"].(map[string]any)
+	result, ok := body["Result"].(map[string]any)
 	if !ok {
 		t.Fatalf("缺少 result")
 	}
-	if result["version"] == "" || result["version"] == nil {
+	if result["Version"] == "" || result["Version"] == nil {
 		t.Errorf("缺少 version")
 	}
-	if _, ok := result["bots"]; !ok {
+	if _, ok := result["Bots"]; !ok {
 		t.Errorf("缺少 bots")
 	}
 }

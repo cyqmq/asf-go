@@ -162,6 +162,14 @@ func (b *Bot) IsConnected() bool {
 	return b.steamClient != nil && b.steamClient.LoggedOn()
 }
 
+// WebSessionOrNil 返回当前 Web 会话（未登录时为 nil）。
+func (b *Bot) WebSessionOrNil() *steam.WebSession {
+	if b.steamClient == nil {
+		return nil
+	}
+	return b.steamClient.WebSessionOrNil()
+}
+
 // SteamID 返回当前 Bot 的 SteamID64（未登录时为 0）。
 func (b *Bot) SteamID() uint64 {
 	if b.steamClient == nil {
@@ -1370,6 +1378,16 @@ func (b *Bot) loadAuthenticator() *authenticator.Authenticator {
 		return nil
 	}
 	return a
+}
+
+// HasAuthenticator 返回是否已配置移动令牌。
+func (b *Bot) HasAuthenticator() bool {
+	return b.auth != nil
+}
+
+// Auth 返回移动令牌实例（未配置时为 nil）。
+func (b *Bot) Auth() *authenticator.Authenticator {
+	return b.auth
 }
 
 // TwoFactorCode 返回当前 Steam Guard 验证码。

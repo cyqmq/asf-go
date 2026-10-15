@@ -25,6 +25,7 @@ type GitHubRelease struct {
 	PublishedAt string        `json:"published_at"`
 	HTMLURL     string        `json:"html_url"`
 	Prerelease  bool          `json:"prerelease"`
+	Body        string        `json:"body"`
 	Assets      []GitHubAsset `json:"assets"`
 }
 
@@ -65,6 +66,32 @@ func (g *GitHubClient) GetLatestRelease(owner, repo string, stable bool) (*GitHu
 	}
 	if stable && release.Prerelease {
 		return nil, fmt.Errorf("最新 Release 为预发布版")
+	}
+	return &release, nil
+}
+
+// GetRelease 获取指定版本标签的 Release。
+func (g *GitHubClient) GetRelease(owner, repo, tag string) (*GitHubRelease, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", owner, repo, tag)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "asf-go")
+
+	resp, err := g.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("请求 GitHub 失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub 返回状态码 %d", resp.StatusCode)
+	}
+
+	var release GitHubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, fmt.Errorf("解析 GitHub Release 失败: %w", err)
 	}
 	return &release, nil
 }
