@@ -448,7 +448,8 @@ func (s *Server) handleGitHubRelease(w http.ResponseWriter, r *http.Request) {
 	var release *web.GitHubRelease
 	var err error
 	if version == "" || version == "latest" {
-		release, err = web.GetLatestReleaseCached("JustArchiNET", "ArchiSteamFarm", false)
+		// 使用我们自己的 asf-go 仓库（而非上游 ASF），让 ASF-ui 的版本/更新信息与本项目一致
+		release, err = web.GetLatestReleaseCached("cyqmq", "asf-go", false)
 		if err != nil {
 			// GitHub API 限流/不可用时返回合成 release（版本号置空，前端走历史分支仍可加载 wiki）
 			release = &web.GitHubRelease{
@@ -460,7 +461,7 @@ func (s *Server) handleGitHubRelease(w http.ResponseWriter, r *http.Request) {
 			err = nil
 		}
 	} else {
-		release, err = client.GetRelease("JustArchiNET", "ArchiSteamFarm", version)
+		release, err = client.GetRelease("cyqmq", "asf-go", version)
 		if err != nil {
 			// ASF-ui 用 /release/{version} 判断是否需要按历史版本加载 wiki；版本不存在（如 asf-go 自己的版本号）
 			// 时返回合成 release，避免前端 fetchWiki 卡住（原版 ASF 的版本号在仓库中真实存在）。
