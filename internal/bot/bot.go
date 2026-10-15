@@ -80,7 +80,7 @@ func (b *Bot) Start() error {
 		return b.startQRLogin()
 	}
 
-	client := steam.NewClient(b.Log, b.Config.SteamLogin, b.Config.SteamPassword, b.loginKey)
+	client := steam.NewClient(b.Log, b.Config.SteamLogin, b.Config.GetDecryptedSteamPassword(), b.loginKey)
 	client.SetOnLoginKey(func(key string) {
 		b.loginKey = key
 		b.saveLoginKey()

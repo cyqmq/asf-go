@@ -47,6 +47,7 @@ type GlobalConfig struct {
 	WebProxyText              string   `json:"WebProxy"`
 	WebProxyUsername          string   `json:"WebProxyUsername"`
 	SteamWebApiKey            string   `json:"SteamWebApiKey"`
+	IPCOrigins                []string `json:"IPCOrigins,omitempty"`
 }
 
 // Defaults 返回 ASF 默认全局配置。

@@ -23,18 +23,22 @@ type originalPathKey struct{}
 // Server 是 ASF IPC HTTP 服务。
 
 type Server struct {
-	asf      *core.ASF
-	log      *logging.Logger
-	password string
-	httpSrv  *http.Server
-	listener net.Listener
+	asf            *core.ASF
+	log            *logging.Logger
+	password       string
+	passwordFormat string
+	httpSrv        *http.Server
+	listener       net.Listener
 }
 
 // New 创建 IPC 服务。
 
 func New(asf *core.ASF, log *logging.Logger, password string) *Server {
-	s := &Server{asf: asf, log: log, password: password}
-	return s
+	format := asf.Config.IPCPasswordFormat
+	if format == "" {
+		format = "PlainText"
+	}
+	return &Server{asf: asf, log: log, password: password, passwordFormat: format}
 }
 
 // Start 在指定地址启动监听（默认 [::]:1242）。
@@ -76,8 +80,12 @@ func (s *Server) Start(addr string) error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// 请求日志（调试用）：记录认证头信息
 		s.log.Info("IPC 请求: %s %s (auth=%q)", r.Method, r.URL.Path, r.Header.Get("Authentication"))
-		// CORS：ASF-ui 携带 X-APIKey 自定义头，需要处理预检
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		// CORS：默认允许所有来源（ASF-ui 需要跨域）；配置 IPCOrigins 白名单后仅允许指定来源
+		allowOrigin := corsAllowOrigin(s.asf.Config.IPCOrigins, r.Header.Get("Origin"))
+		if allowOrigin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+		}
+		w.Header().Add("Vary", "Origin")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authentication, Content-Type, Authorization")
 		w.Header().Set("Access-Control-Max-Age", "86400")
@@ -142,14 +150,14 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 		if apiKey == "" {
 			apiKey = r.URL.Query().Get("password")
 		}
-		if apiKey != "" && subtle.ConstantTimeCompare([]byte(apiKey), []byte(s.password)) == 1 {
+		if apiKey != "" && s.verifyPassword(apiKey) {
 			next(w, r)
 			return
 		}
 
 		// 兼容 Basic Auth
 		user, pass, ok := r.BasicAuth()
-		if ok && user == "ipc" && subtle.ConstantTimeCompare([]byte(pass), []byte(s.password)) == 1 {
+		if ok && user == "ipc" && s.verifyPassword(pass) {
 			next(w, r)
 			return
 		}
@@ -160,6 +168,26 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		// 原版 ASF 不发送 WWW-Authenticate 挑战头，避免干扰浏览器/代理行为
 		writeErrorCode(w, http.StatusUnauthorized, ErrorUnauthorized, "Unauthorized")
+	}
+}
+
+// verifyPassword 根据 IPCPasswordFormat 验证 IPC 密码：
+// PlainText 直接比较；Pbkdf2/SCrypt 对输入做哈希后与存储的哈希常量时间比较（对齐原版 VerifyHash）。
+func (s *Server) verifyPassword(input string) bool {
+	if s.password == "" {
+		return true
+	}
+	switch strings.ToLower(s.passwordFormat) {
+	case "pbkdf2":
+		return subtle.ConstantTimeCompare([]byte(hashPBKDF2(input)), []byte(s.password)) == 1
+	case "scrypt":
+		h, err := hashSCrypt(input)
+		if err != nil {
+			return false
+		}
+		return subtle.ConstantTimeCompare([]byte(h), []byte(s.password)) == 1
+	default:
+		return subtle.ConstantTimeCompare([]byte(input), []byte(s.password)) == 1
 	}
 }
 

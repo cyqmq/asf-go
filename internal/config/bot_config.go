@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	asfcrypto "github.com/asf-go/asf/internal/crypto"
 )
 
 // AssetType 对应 C# EAssetType 枚举。
@@ -184,6 +187,30 @@ func LoadBotConfig(path string) (*BotConfig, error) {
 		return nil, fmt.Errorf("解析 Bot 配置失败 %s: %w", path, err)
 	}
 	return cfg, nil
+}
+
+// GetDecryptedSteamPassword 返回解密后的 Steam 密码。
+// 当 PasswordFormat=AES 且值带 encrypted: 前缀时，用 ASF_CRYPTKEY 解密密文；否则原样返回（兼容明文配置）。
+func (c *BotConfig) GetDecryptedSteamPassword() string {
+	if c.PasswordFormat == "AES" && strings.HasPrefix(c.SteamPassword, "encrypted:") {
+		if decrypted, err := asfcrypto.DecryptAES(strings.TrimPrefix(c.SteamPassword, "encrypted:")); err == nil {
+			return decrypted
+		}
+	}
+	return c.SteamPassword
+}
+
+// SetSteamPassword 设置 Steam 密码；启用 ASF_CRYPTKEY 时加密存储并标记 PasswordFormat=AES，否则明文存储。
+func (c *BotConfig) SetSteamPassword(plaintext string) {
+	if asfcrypto.EncryptionEnabled() {
+		if encrypted, err := asfcrypto.EncryptAES(plaintext); err == nil {
+			c.SteamPassword = "encrypted:" + encrypted
+			c.PasswordFormat = "AES"
+			return
+		}
+	}
+	c.SteamPassword = plaintext
+	c.PasswordFormat = "PlainText"
 }
 
 // Save 将 Bot 配置写入指定路径。

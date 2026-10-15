@@ -93,3 +93,25 @@ func parseUint64(s string) (uint64, error) {
 	}
 	return v, nil
 }
+
+// containsString 判断字符串切片中是否包含目标值。
+func containsString(list []string, target string) bool {
+	for _, s := range list {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
+// corsAllowOrigin 计算 CORS 的 Access-Control-Allow-Origin 值：
+// 白名单为空返回 "*"；来源在白名单返回该来源；否则返回空（不设置头，浏览器阻止跨域）。
+func corsAllowOrigin(allowed []string, origin string) string {
+	if len(allowed) == 0 {
+		return "*"
+	}
+	if containsString(allowed, origin) {
+		return origin
+	}
+	return ""
+}

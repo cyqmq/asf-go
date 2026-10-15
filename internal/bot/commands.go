@@ -187,7 +187,7 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 			reply = "用法: password <新密码>"
 			break
 		}
-		b.Config.SteamPassword = newPassword
+		b.Config.SetSteamPassword(newPassword)
 		if err := b.saveConfig(); err != nil {
 			reply = fmt.Sprintf("保存密码失败: %v", err)
 		} else {
