@@ -102,7 +102,7 @@ var csEnumTypes = map[string]enumInfo{
 	},
 	"ArchiSteamFarm.Steam.Storage.BotConfig+EBotBehaviour": {
 		Underlying: "System.Byte",
-		Flags: true,
+		Flags:      true,
 		Values: map[string]string{
 			"None": "0", "RejectInvalidFriendInvites": "1", "RejectInvalidTrades": "2",
 			"RejectInvalidGroupInvites": "4", "DismissInventoryNotifications": "8",
@@ -283,7 +283,7 @@ func getTypeInfo(typeName string) (*typeResponse, bool) {
 			Properties: typeProperties{
 				BaseType:         "System.Enum",
 				CustomAttributes: info.customAttributes(),
-				UnderlyingType:    info.Underlying,
+				UnderlyingType:   info.Underlying,
 			},
 		}, true
 	}
