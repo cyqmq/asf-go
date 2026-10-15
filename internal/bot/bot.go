@@ -162,6 +162,8 @@ func (b *Bot) pollQRLogin() {
 				b.Log.Debug("QR 轮询失败: %v", err)
 				continue
 			}
+			// 同步 Steam 刷新的挑战 URL（二维码有效期约 60 秒）
+			b.qrChallengeURL = b.qrSession.ChallengeURL
 			if !done {
 				continue
 			}

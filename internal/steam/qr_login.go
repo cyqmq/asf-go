@@ -131,15 +131,25 @@ func (s *QRLoginSession) Poll() (bool, error) {
 
 	var envelope struct {
 		Response struct {
+			NewChallengeURL      string `json:"new_challenge_url"`
 			RefreshToken         string `json:"refresh_token"`
 			AccessToken          string `json:"access_token"`
 			AccountName          string `json:"account_name"`
 			SteamID              string `json:"steamid"`
+			PollInterval         int    `json:"poll_interval"`
 			HadRemoteInteraction bool   `json:"had_remote_interaction"`
 		} `json:"response"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		return false, err
+	}
+
+	// Steam 会周期性刷新挑战 URL（二维码有效期约 60 秒），需要同步更新。
+	if envelope.Response.NewChallengeURL != "" {
+		s.ChallengeURL = envelope.Response.NewChallengeURL
+	}
+	if envelope.Response.PollInterval > 0 {
+		s.Interval = envelope.Response.PollInterval
 	}
 
 	s.AccountName = envelope.Response.AccountName

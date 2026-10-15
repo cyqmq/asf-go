@@ -82,6 +82,23 @@ func (s *Server) Start(addr string) error {
 	apiMux.HandleFunc("/api/", s.auth(s.handleAPI404))
 
 	mux := http.NewServeMux()
+
+	// /qr/{bot}：无需认证的二维码登录跳转页（二维码短时有效，仅用于扫码测试）。
+	mux.HandleFunc("/qr/", func(w http.ResponseWriter, r *http.Request) {
+		botName := strings.Trim(strings.TrimPrefix(r.URL.Path, "/qr/"), "/")
+		parts := strings.Split(botName, "/")
+		if len(parts) == 0 || parts[0] == "" {
+			http.NotFound(w, r)
+			return
+		}
+		b, ok := s.asf.Bots()[parts[0]]
+		if !ok || b.QRChallengeURL() == "" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, b.QRChallengeURL(), http.StatusFound)
+	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// 请求日志（调试用）：记录认证头信息
 		s.log.Info("IPC 请求: %s %s (auth=%q)", r.Method, r.URL.Path, r.Header.Get("Authentication"))
