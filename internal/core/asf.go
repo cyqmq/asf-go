@@ -197,6 +197,19 @@ func (a *ASF) UpdateBotConfig(botName string, cfg *config.BotConfig) error {
 	return cfg.Save(filepath.Join(a.ConfigPath, botName+".json"))
 }
 
+// RemoveBot 停止并删除指定 Bot（对应 IPC DELETE/POST /api/Bot/{name}/delete）。
+func (a *ASF) RemoveBot(botName string) error {
+	b, ok := a.bots[botName]
+	if !ok {
+		return fmt.Errorf("Bot %s 不存在", botName)
+	}
+	_ = b.Stop()
+	_ = os.Remove(filepath.Join(a.ConfigPath, botName+".json"))
+	_ = os.Remove(filepath.Join(a.ConfigPath, botName+".maFile.json"))
+	delete(a.bots, botName)
+	return nil
+}
+
 // Stop 停止所有 Bot 并关闭日志。
 func (a *ASF) Stop() error {
 	a.Log.Info("ASF 正在关闭")

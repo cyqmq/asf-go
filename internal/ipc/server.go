@@ -366,7 +366,11 @@ func (s *Server) handleGitHubRelease(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "仅支持 GET"})
 		return
 	}
-	version := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/www/github/release"), "/")
+	prefix := "/api/www/github/release"
+	if strings.HasPrefix(r.URL.Path, "/api/releases") {
+		prefix = "/api/releases"
+	}
+	version := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
 	client := web.NewGitHubClient()
 
 	var release *web.GitHubRelease
@@ -598,6 +602,13 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) >= 2 {
 		action := strings.Join(parts[1:], "/")
+		// 别名路径归一化（兼容第三方/扫描器使用的非官方路径）
+		switch strings.ToLower(action) {
+		case "2fa":
+			action = "twofactorauthentication"
+		case "bgr":
+			action = "gamesToRedeeminbackground"
+		}
 		switch key := strings.ToLower(r.Method + " " + action); key {
 		case "post pause":
 			b.Pause()
@@ -621,6 +632,16 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 		case "post stop":
 			b.Pause()
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已停止"})
+		case "post delete":
+			if r.Header.Get("X-ASF-Confirm") != "true" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "需要确认头 X-ASF-Confirm: true 才能删除 Bot"})
+				return
+			}
+			if err := s.asf.RemoveBot(botName); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已删除"})
 		case "get gamestofarm":
 			games := b.FarmingGames()
 			list := make([]map[string]any, 0, len(games))
