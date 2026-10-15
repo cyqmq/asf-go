@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -76,7 +77,9 @@ func (s *Server) Start(addr string) error {
 	apiMux.HandleFunc("/api/releases", s.auth(s.handleGitHubRelease))
 	apiMux.HandleFunc("/api/releases/", s.auth(s.handleGitHubRelease))
 	apiMux.HandleFunc("/api/type", s.auth(s.handleType))
+	apiMux.HandleFunc("/api/type/", s.auth(s.handleType))
 	apiMux.HandleFunc("/api/structure", s.auth(s.handleStructure))
+	apiMux.HandleFunc("/api/structure/", s.auth(s.handleStructure))
 	apiMux.HandleFunc("/api/storage/", s.auth(s.handleStorage))
 	apiMux.HandleFunc("/api/plugins", s.auth(s.handlePlugins))
 	apiMux.HandleFunc("/api/", s.auth(s.handleAPI404))
@@ -309,14 +312,64 @@ func serveStatic(sub fs.FS, w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-// handleType 返回 ASF-ui 配置编辑器所需的类型信息（暂返回空结构，避免 404）。
-func (s *Server) handleType(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{}})
+// handleType 返回 ASF-ui 配置编辑器所需的类型信息（对应原版 TypeController /api/type/{type}）。
+// ASF-ui 新建/编辑机器人页面会请求 /api/type/ArchiSteamFarm.Steam.Storage.BotConfig 等类型元数据。
+func (s *Server) handleType(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "仅支持 GET"})
+		return
+	}
+	typeName := extractSubPath(r, "/api/type/")
+	if typeName == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{}})
+		return
+	}
+	resp, ok := getTypeInfo(typeName)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "无效类型: " + typeName})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": resp})
 }
 
-// handleStructure 返回 ASF-ui 配置编辑器所需的配置结构（暂返回空结构，避免 404）。
-func (s *Server) handleStructure(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{}})
+// handleStructure 返回 ASF-ui 配置编辑器所需的默认配置结构（对应原版 StructureController /api/structure/{type}）。
+func (s *Server) handleStructure(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "仅支持 GET"})
+		return
+	}
+	typeName := extractSubPath(r, "/api/structure/")
+	if typeName == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{}})
+		return
+	}
+	obj, ok := getStructure(typeName)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "无效类型: " + typeName})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": obj})
+}
+
+// extractSubPath 从原始请求路径提取 /api/xxx/ 之后的子路径，并做 URL 解码。
+func extractSubPath(r *http.Request, prefix string) string {
+	origPath, _ := r.Context().Value(originalPathKey{}).(string)
+	if origPath == "" {
+		origPath = r.URL.Path
+	}
+	lower := strings.ToLower(origPath)
+	idx := strings.Index(lower, prefix)
+	var sub string
+	if idx >= 0 {
+		sub = origPath[idx+len(prefix):]
+	} else {
+		sub = strings.TrimPrefix(origPath, strings.TrimSuffix(prefix, "/"))
+	}
+	sub = strings.Trim(sub, "/")
+	if decoded, err := url.PathUnescape(sub); err == nil {
+		sub = decoded
+	}
+	return sub
 }
 
 // handleAPI404 为未实现的 API 端点返回 JSON 404（而非静态文件服务器的文本 404）。
@@ -1062,7 +1115,8 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": botStatusMap(b)})
+	// 原版 BotGet 返回 GenericResponse<IReadOnlyDictionary<string, Bot>>，Result 是 {botName: bot} 字典
+	writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{botName: botStatusMap(b)}})
 }
 
 // handleBots 返回机器人列表/统计（兼容 ASF-ui 与第三方工具的 /api/bots 系列路径）。
