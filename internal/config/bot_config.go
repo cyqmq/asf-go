@@ -57,15 +57,16 @@ func (a Access) Rank() int {
 type TradingPreferences uint16
 
 const (
-	TradingPreferencesNone            TradingPreferences = 0
-	TradingPreferencesAcceptAll       TradingPreferences = 1
-	TradingPreferencesSteamlvlLimit   TradingPreferences = 2
-	TradingPreferencesMatchMakingOnly TradingPreferences = 4
-	TradingPreferencesDontPreferItems TradingPreferences = 8
-	TradingPreferencesPassive         TradingPreferences = 16
-	TradingPreferencesAcceptGifts     TradingPreferences = 32
-	TradingPreferencesSendTradePeriod TradingPreferences = 64
-	TradingPreferencesSendTrades      TradingPreferences = 128
+	TradingPreferencesNone              TradingPreferences = 0
+	TradingPreferencesAcceptAll         TradingPreferences = 1
+	TradingPreferencesSteamlvlLimit     TradingPreferences = 2
+	TradingPreferencesMatchMakingOnly   TradingPreferences = 4
+	TradingPreferencesDontPreferItems   TradingPreferences = 8
+	TradingPreferencesPassive           TradingPreferences = 16
+	TradingPreferencesAcceptGifts       TradingPreferences = 32
+	TradingPreferencesSendTradePeriod   TradingPreferences = 64
+	TradingPreferencesSendTrades        TradingPreferences = 128
+	TradingPreferencesSteamTradeMatcher TradingPreferences = 256
 )
 
 // Has 判断位掩码是否包含指定标志。

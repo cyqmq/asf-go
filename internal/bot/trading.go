@@ -174,6 +174,25 @@ func (b *Bot) handleTradeOffer(offer trading.TradeOffer) {
 				reason = "匹配交易"
 			}
 		}
+	case prefs.Has(config.TradingPreferencesSteamTradeMatcher):
+		// SteamTradeMatcher：原版 Exchange 模块的公平交换逻辑
+		if len(offer.ItemsToGive) > len(offer.ItemsToReceive) {
+			b.Log.Info("STM 拒绝报价 %d（我方给出物品数量更多）", offer.TradeOfferID)
+			break
+		}
+		if len(b.Config.MatchableTypes) == 0 {
+			b.Log.Info("STM 忽略报价 %d（MatchableTypes 为空）", offer.TradeOfferID)
+			break
+		}
+		fair, err := b.isFairExchange(offer.ItemsToGive, offer.ItemsToReceive, b.Config.MatchableTypes)
+		if err != nil {
+			b.Log.Warn("STM 公平性检查失败: %v", err)
+			return
+		}
+		if fair {
+			shouldAccept = true
+			reason = "STM 公平交换"
+		}
 	case prefs.Has(config.TradingPreferencesSteamlvlLimit):
 		// SteamlvlLimit：需要查询对方等级；无 API Key 时忽略该限制
 		level, err := fetchSteamLevel(b, partnerSteamID)
@@ -245,6 +264,79 @@ func matchableType(matchable []config.AssetType, itemType string) bool {
 		}
 	}
 	return false
+}
+
+// assetTypeKey 标识物品类型（appID + 规范化类型名）。
+type assetTypeKey struct {
+	appID    uint32
+	itemType string
+}
+
+// assetTypes 将报价物品按 (appID, 类型) 分组统计数量。
+func (b *Bot) assetTypes(items []trading.TradeAsset) (map[assetTypeKey]uint32, error) {
+	result := make(map[assetTypeKey]uint32)
+	if len(items) == 0 {
+		return result, nil
+	}
+
+	type inventoryKey struct {
+		appID     uint32
+		contextID uint64
+	}
+	classIDsByKey := make(map[inventoryKey][]uint64)
+	for _, it := range items {
+		ctx, err := strconv.ParseUint(it.ContextID, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("解析 contextID %q 失败: %w", it.ContextID, err)
+		}
+		key := inventoryKey{appID: it.AppID, contextID: ctx}
+		classIDsByKey[key] = append(classIDsByKey[key], it.ClassID)
+	}
+
+	typeByClass := make(map[uint64]string)
+	for key := range classIDsByKey {
+		inv, err := b.GetInventory(key.appID, key.contextID)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range inv.Items {
+			typeByClass[item.ClassID] = item.Type
+		}
+	}
+
+	for _, it := range items {
+		typ := strings.ReplaceAll(typeByClass[it.ClassID], " ", "")
+		key := assetTypeKey{appID: it.AppID, itemType: typ}
+		result[key] += uint32(it.Amount)
+	}
+	return result, nil
+}
+
+// isFairExchange 实现原版 Exchange 模块的公平性检查：
+// 我方给出的每个 (appID, 类型) 物品数量必须不超过对方提供的同类型数量，且给出的类型必须在 MatchableTypes 中。
+func (b *Bot) isFairExchange(give, receive []trading.TradeAsset, matchable []config.AssetType) (bool, error) {
+	giveTypes, err := b.assetTypes(give)
+	if err != nil {
+		return false, err
+	}
+	receiveTypes, err := b.assetTypes(receive)
+	if err != nil {
+		return false, err
+	}
+	return fairExchange(giveTypes, receiveTypes, matchable), nil
+}
+
+// fairExchange 是 isFairExchange 的纯逻辑部分（便于单元测试）。
+func fairExchange(giveTypes, receiveTypes map[assetTypeKey]uint32, matchable []config.AssetType) bool {
+	for key, giveAmount := range giveTypes {
+		if !matchableType(matchable, key.itemType) {
+			return false
+		}
+		if receiveTypes[key] < giveAmount {
+			return false
+		}
+	}
+	return true
 }
 
 // containsUint64 判断切片中是否包含目标值。

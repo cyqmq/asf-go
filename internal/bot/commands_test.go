@@ -123,3 +123,26 @@ func TestMatchableType(t *testing.T) {
 		}
 	}
 }
+
+func TestFairExchange(t *testing.T) {
+	matchable := []config.AssetType{config.AssetTypeTradingCard}
+	card := assetTypeKey{appID: 753, itemType: "TradingCard"}
+
+	cases := []struct {
+		name    string
+		give    map[assetTypeKey]uint32
+		receive map[assetTypeKey]uint32
+		expected bool
+	}{
+		{"公平交换", map[assetTypeKey]uint32{card: 1}, map[assetTypeKey]uint32{card: 1}, true},
+		{"对方多给", map[assetTypeKey]uint32{card: 1}, map[assetTypeKey]uint32{card: 2}, true},
+		{"我方多给", map[assetTypeKey]uint32{card: 2}, map[assetTypeKey]uint32{card: 1}, false},
+		{"类型不可匹配", map[assetTypeKey]uint32{{appID: 753, itemType: "BoosterPack"}: 1}, map[assetTypeKey]uint32{{appID: 753, itemType: "BoosterPack"}: 1}, false},
+		{"对方缺少类型", map[assetTypeKey]uint32{card: 1}, map[assetTypeKey]uint32{{appID: 753, itemType: "FoilTradingCard"}: 1}, false},
+	}
+	for _, tc := range cases {
+		if got := fairExchange(tc.give, tc.receive, matchable); got != tc.expected {
+			t.Errorf("%s: fairExchange = %v, 期望 %v", tc.name, got, tc.expected)
+		}
+	}
+}
