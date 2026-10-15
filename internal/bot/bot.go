@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/asf-go/asf/internal/authenticator"
@@ -34,11 +36,14 @@ type Bot struct {
 	cardsFarmer *CardsFarmer
 	auth        *authenticator.Authenticator
 
+	reconnecting atomic.Bool
+
 	tradingStopCh       chan struct{}
 	tradingDoneCh       chan struct{}
 	confirmationsStopCh chan struct{}
 
 	// QR 扫码登录相关
+	qrMu           sync.Mutex
 	qrSession      *steam.QRLoginSession
 	qrChallengeURL string
 	qrStopCh       chan struct{}
@@ -83,6 +88,7 @@ func (b *Bot) Start() error {
 	client.SetOnChatMessage(b.handleCommand)
 	client.SetOnFriendRequest(b.handleFriendRequest)
 	client.SetOnChatInvite(b.handleChatInvite)
+	client.SetOnDisconnect(func() { b.scheduleReconnect() })
 	// Steam Guard：优先使用 maFile 生成令牌码；否则支持环境变量注入
 	if b.auth != nil {
 		if code, err := b.auth.GenerateCode(); err == nil {
@@ -121,6 +127,7 @@ func (b *Bot) startQRLogin() error {
 	client.SetOnChatMessage(b.handleCommand)
 	client.SetOnFriendRequest(b.handleFriendRequest)
 	client.SetOnChatInvite(b.handleChatInvite)
+	client.SetOnDisconnect(func() { b.scheduleReconnect() })
 	b.steamClient = client
 
 	session, challengeURL, err := steam.StartQRLogin(nil)
@@ -128,9 +135,11 @@ func (b *Bot) startQRLogin() error {
 		b.Log.Error("启动 QR 登录失败: %v", err)
 		return fmt.Errorf("Bot %s 启动 QR 登录失败: %w", b.Name, err)
 	}
+	b.qrMu.Lock()
 	b.qrSession = session
 	b.qrChallengeURL = challengeURL
 	b.qrStopCh = make(chan struct{})
+	b.qrMu.Unlock()
 	b.Log.Info("QR 登录已启动，等待扫码: %s", challengeURL)
 
 	go b.pollQRLogin()
@@ -147,9 +156,10 @@ func (b *Bot) pollQRLogin() {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	stopCh := b.qrStopCh
 	for {
 		select {
-		case <-b.qrStopCh:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			done, err := b.qrSession.Poll()
@@ -158,14 +168,18 @@ func (b *Bot) pollQRLogin() {
 				continue
 			}
 			// 同步 Steam 刷新的挑战 URL（二维码有效期约 60 秒）
+			b.qrMu.Lock()
 			b.qrChallengeURL = b.qrSession.ChallengeURL
+			b.qrMu.Unlock()
 			if !done {
 				continue
 			}
 			b.Log.Info("QR 扫码已确认，账号 %s，开始登录", b.qrSession.AccountName)
 			b.steamClient.SetUsername(b.qrSession.AccountName)
 			b.steamClient.SetAccessToken(b.qrSession.LoginToken())
+			b.qrMu.Lock()
 			b.qrChallengeURL = ""
+			b.qrMu.Unlock()
 			if err := b.steamClient.Connect(90 * time.Second); err != nil {
 				b.Log.Error("Bot %s 连接失败: %v", b.Name, err)
 				return
@@ -199,12 +213,16 @@ func (b *Bot) finishStartup() {
 // QRChallengeURL 返回当前 QR 登录挑战 URL（未启动 QR 登录时为空）。
 
 func (b *Bot) QRChallengeURL() string {
+	b.qrMu.Lock()
+	defer b.qrMu.Unlock()
 	return b.qrChallengeURL
 }
 
 // CancelQRLogin 取消正在进行的 QR 登录轮询。
 
 func (b *Bot) CancelQRLogin() {
+	b.qrMu.Lock()
+	defer b.qrMu.Unlock()
 	if b.qrStopCh != nil {
 		close(b.qrStopCh)
 		b.qrStopCh = nil
@@ -229,6 +247,49 @@ func (b *Bot) Stop() error {
 	}
 	b.Log.Info("Bot %s 已停止", b.Name)
 	return b.Log.Close()
+}
+
+// stopModules 停止所有运行中的后台模块（不关闭日志），用于断线重连前清理。
+func (b *Bot) stopModules() {
+	b.CancelQRLogin()
+	b.stopTrading()
+	if b.confirmationsStopCh != nil {
+		close(b.confirmationsStopCh)
+		b.confirmationsStopCh = nil
+	}
+	if b.cardsFarmer != nil {
+		b.cardsFarmer.Stop()
+	}
+	if b.steamClient != nil {
+		b.steamClient.Disconnect()
+	}
+}
+
+// scheduleReconnect 在断线后按指数退避自动重连（最多 5 次，间隔 1s/2s/4s/.../60s）。
+func (b *Bot) scheduleReconnect() {
+	if !b.reconnecting.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer b.reconnecting.Store(false)
+		delay := time.Second
+		for attempt := 1; attempt <= 5; attempt++ {
+			time.Sleep(delay)
+			b.Log.Info("Bot %s 尝试自动重连（第 %d 次）", b.Name, attempt)
+			b.stopModules()
+			if err := b.Start(); err == nil {
+				b.Log.Info("Bot %s 重连成功", b.Name)
+				return
+			} else {
+				b.Log.Warn("Bot %s 重连失败: %v", b.Name, err)
+			}
+			delay *= 2
+			if delay > 60*time.Second {
+				delay = 60 * time.Second
+			}
+		}
+		b.Log.Warn("Bot %s 达到最大重连次数，停止重连", b.Name)
+	}()
 }
 
 // Pause 暂停挂机。

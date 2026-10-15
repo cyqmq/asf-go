@@ -45,9 +45,10 @@ type CardsFarmer struct {
 // NewCardsFarmer 创建挂机器。
 func NewCardsFarmer(b *Bot) *CardsFarmer {
 	return &CardsFarmer{
-		bot:    b,
-		log:    b.Log,
-		stopCh: make(chan struct{}),
+		bot:         b,
+		log:         b.Log,
+		stopCh:      make(chan struct{}),
+		gamesToFarm: b.loadState(),
 	}
 }
 
@@ -158,6 +159,7 @@ func (cf *CardsFarmer) farmOnce() {
 	cf.mu.Lock()
 	cf.gamesToFarm = games
 	cf.mu.Unlock()
+	cf.bot.saveState(games)
 
 	if len(games) == 0 {
 		cf.log.Info("没有发现仍有卡牌掉落的游戏")

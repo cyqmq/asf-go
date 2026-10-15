@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,12 +37,14 @@ type Client struct {
 	onChatMessage   func(chatterID uint64, message string)
 	onFriendRequest func(friendID uint64)
 	onChatInvite    func(inviterID uint64, chatRoomID uint64, roomName string)
+	onDisconnect    func()
 
 	webSession *WebSession
 
-	loggedOn   chan struct{}
-	isLoggedOn atomic.Bool
-	stopCh     chan struct{}
+	loggedOn       chan struct{}
+	isLoggedOn     atomic.Bool
+	stopCh         chan struct{}
+	disconnectOnce sync.Once
 }
 
 // NewClient 创建 Steam 客户端。
@@ -77,6 +80,11 @@ func (c *Client) SetOnFriendRequest(fn func(friendID uint64)) {
 // SetOnChatInvite 注册聊天/群组邀请回调。
 func (c *Client) SetOnChatInvite(fn func(inviterID uint64, chatRoomID uint64, roomName string)) {
 	c.onChatInvite = fn
+}
+
+// SetOnDisconnect 设置断开连接回调（用于断线自动重连）。
+func (c *Client) SetOnDisconnect(fn func()) {
+	c.onDisconnect = fn
 }
 
 // SetAuthCode 设置 Steam Guard 邮箱验证码。
@@ -185,6 +193,9 @@ func (c *Client) eventLoop() {
 
 			case *steam.DisconnectedEvent:
 				c.log.Warn("与 Steam 断开连接")
+				if c.onDisconnect != nil {
+					c.onDisconnect()
+				}
 
 			case steam.FatalErrorEvent:
 				c.log.Error("Steam 致命错误: %v", ev)
@@ -196,10 +207,12 @@ func (c *Client) eventLoop() {
 	}
 }
 
-// Disconnect 断开 Steam 连接。
+// Disconnect 断开 Steam 连接（幂等）。
 func (c *Client) Disconnect() {
-	close(c.stopCh)
-	c.inner.Disconnect()
+	c.disconnectOnce.Do(func() {
+		close(c.stopCh)
+		c.inner.Disconnect()
+	})
 }
 
 // InitWebSession 初始化 steamcommunity Web 会话（用于抓取卡牌页面）。

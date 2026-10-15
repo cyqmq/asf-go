@@ -146,3 +146,36 @@ func TestFairExchange(t *testing.T) {
 		}
 	}
 }
+
+func TestQRChallengeURLConcurrent(t *testing.T) {
+	b := newCommandTestBot(t)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 1000; i++ {
+			_ = b.QRChallengeURL()
+		}
+	}()
+	for i := 0; i < 1000; i++ {
+		b.qrMu.Lock()
+		b.qrChallengeURL = "https://s.team/q/test"
+		b.qrMu.Unlock()
+	}
+	<-done
+}
+
+func TestStatePersistence(t *testing.T) {
+	b := newCommandTestBot(t)
+	games := []GameInfo{
+		{AppID: 730, Name: "Counter-Strike 2", CardsRemaining: 3},
+		{AppID: 440, Name: "Team Fortress 2", CardsRemaining: 1},
+	}
+	b.saveState(games)
+	loaded := b.loadState()
+	if len(loaded) != 2 {
+		t.Fatalf("loadState 应返回 2 个游戏，实际 %d", len(loaded))
+	}
+	if loaded[0].AppID != 730 || loaded[0].CardsRemaining != 3 {
+		t.Errorf("恢复的游戏数据不正确: %+v", loaded[0])
+	}
+}
