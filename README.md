@@ -151,9 +151,19 @@ STEAM_AUTH=abc123 STEAM_2FA=123456 ./asf --config /path/to/config
 - [x] 多 Bot 支持（扫描配置目录所有 `<BotName>.json`）
 - [x] 单元测试（config、CardsFarmer 解析、IPC、插件、GitHub 版本比较、authenticator、trading、好友策略、Loot 筛选）
 
+## 文档
+
+- [变更日志](CHANGELOG.md)
+- [插件开发指南](docs/PLUGIN_DEV.md)
+
+## 参与贡献
+
+- 报告问题 / 功能建议：在 GitHub 仓库提交 [Issue](https://github.com/cyqmq/asf-go/issues/new/choose)
+- 社区讨论：欢迎在仓库 [Discussions](https://github.com/cyqmq/asf-go/discussions) 交流使用经验、踩坑与想法
+
 ## 待实现（Roadmap）
 
-- [ ] 库存批量兑换（`Exchange` 模块，原版已移除 `!grind`，需自行设计）
+- 更多原版命令与模块的移植（欢迎通过 Discussions/Issue 提出优先级）
 
 ## 许可证
 
