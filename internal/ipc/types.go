@@ -41,29 +41,30 @@ func (e enumInfo) customAttributes() []string {
 
 // csFieldTypeOverrides 记录 Go 配置结构体中无法由反射直接推断的 C# 类型映射
 // （枚举字段、位标志、原版使用不同容器类型的字段）。键为 JSON 字段名。
+// 容器类型名遵循原版 GetUnifiedName 格式：`类型名 + 反引号arity + [参数1][参数2]...`。
 var csFieldTypeOverrides = map[string]string{
 	// BotConfig
 	"BotBehaviour":         "ArchiSteamFarm.Steam.Storage.BotConfig+EBotBehaviour",
-	"CompleteTypesToSend":  "System.Collections.Immutable.ImmutableHashSet[[ArchiSteamFarm.Steam.Data.EAssetType]]",
-	"FarmingOrders":        "System.Collections.Immutable.ImmutableList[[ArchiSteamFarm.Steam.Storage.BotConfig+EFarmingOrder]]",
+	"CompleteTypesToSend":  "System.Collections.Immutable.ImmutableHashSet`1[ArchiSteamFarm.Steam.Data.EAssetType]",
+	"FarmingOrders":        "System.Collections.Immutable.ImmutableList`1[ArchiSteamFarm.Steam.Storage.BotConfig+EFarmingOrder]",
 	"FarmingPreferences":   "ArchiSteamFarm.Steam.Storage.BotConfig+EFarmingPreferences",
 	"GamingDeviceType":     "SteamKit2.EGamingDeviceType",
-	"LootableTypes":        "System.Collections.Immutable.ImmutableHashSet[[ArchiSteamFarm.Steam.Data.EAssetType]]",
-	"MatchableTypes":       "System.Collections.Immutable.ImmutableHashSet[[ArchiSteamFarm.Steam.Data.EAssetType]]",
+	"LootableTypes":        "System.Collections.Immutable.ImmutableHashSet`1[ArchiSteamFarm.Steam.Data.EAssetType]",
+	"MatchableTypes":       "System.Collections.Immutable.ImmutableHashSet`1[ArchiSteamFarm.Steam.Data.EAssetType]",
 	"OnlineFlags":          "SteamKit2.EPersonaStateFlag",
 	"OnlineStatus":         "SteamKit2.EPersonaState",
 	"PasswordFormat":       "ArchiSteamFarm.Core.ArchiCryptoHelper+ECryptoMethod",
 	"RedeemingPreferences": "ArchiSteamFarm.Steam.Storage.BotConfig+ERedeemingPreferences",
 	"RemoteCommunication":  "ArchiSteamFarm.Steam.Storage.BotConfig+ERemoteCommunication",
-	"SteamUserPermissions": "System.Collections.Immutable.ImmutableDictionary[[System.UInt64],[ArchiSteamFarm.Steam.Storage.BotConfig+EAccess]]",
+	"SteamUserPermissions": "System.Collections.Immutable.ImmutableDictionary`2[System.UInt64][ArchiSteamFarm.Steam.Storage.BotConfig+EAccess]",
 	"TradingPreferences":   "ArchiSteamFarm.Steam.Storage.BotConfig+ETradingPreferences",
-	"TransferableTypes":    "System.Collections.Immutable.ImmutableHashSet[[ArchiSteamFarm.Steam.Data.EAssetType]]",
+	"TransferableTypes":    "System.Collections.Immutable.ImmutableHashSet`1[ArchiSteamFarm.Steam.Data.EAssetType]",
 	"UserInterfaceMode":    "SteamKit2.EUIMode",
 	// GlobalConfig
-	"Blacklist":         "System.Collections.Immutable.ImmutableHashSet[[System.UInt32]]",
+	"Blacklist":         "System.Collections.Immutable.ImmutableHashSet`1[System.UInt32]",
 	"IPCPasswordFormat": "ArchiSteamFarm.Core.ArchiCryptoHelper+EHashingMethod",
 	"OptimizationMode":  "ArchiSteamFarm.Storage.GlobalConfig+EOptimizationMode",
-	"PluginsUpdateList": "System.Collections.Immutable.ImmutableHashSet[[System.String]]",
+	"PluginsUpdateList": "System.Collections.Immutable.ImmutableHashSet`1[System.String]",
 	"PluginsUpdateMode": "ArchiSteamFarm.Storage.GlobalConfig+EPluginsUpdateMode",
 	"SteamProtocols":    "SteamKit2.ProtocolTypes",
 	"UpdateChannel":     "ArchiSteamFarm.Storage.GlobalConfig+EUpdateChannel",
@@ -244,11 +245,11 @@ func csReflectType(t reflect.Type) string {
 	case reflect.Int:
 		return "System.Int32"
 	case reflect.Slice:
-		return "System.Collections.Immutable.ImmutableList[[" + csReflectType(t.Elem()) + "]]"
+		return "System.Collections.Immutable.ImmutableList`1[" + csReflectType(t.Elem()) + "]"
 	case reflect.Map:
 		keyType := csReflectType(t.Key())
 		elemType := csReflectType(t.Elem())
-		return "System.Collections.Immutable.ImmutableDictionary[[" + keyType + "],[" + elemType + "]]"
+		return "System.Collections.Immutable.ImmutableDictionary`2[" + keyType + "][" + elemType + "]"
 	}
 	return "System.String"
 }
@@ -272,7 +273,9 @@ func objectTypeResponse(t reflect.Type, baseType string) *typeResponse {
 	}
 }
 
-// getTypeInfo 返回给定 C# 类型名的 TypeResponse；未知类型返回 ok=false。
+// getTypeInfo 返回给定 C# 类型名的 TypeResponse。
+// 已知枚举/配置类型返回精确结构；未知类型（含 ASF-ui 递归解析时可能产生的容器/子类型名）返回空对象结构，
+// 避免前端配置编辑器因 400 卡在加载中（原版 TypeController 对容器类型同样返回空 Body + BaseType System.Object）。
 func getTypeInfo(typeName string) (*typeResponse, bool) {
 	if info, ok := csEnumTypes[typeName]; ok {
 		return &typeResponse{
@@ -290,10 +293,14 @@ func getTypeInfo(typeName string) (*typeResponse, bool) {
 	case "ArchiSteamFarm.Storage.GlobalConfig":
 		return objectTypeResponse(reflect.TypeOf(config.GlobalConfig{}), "System.Object"), true
 	}
-	return nil, false
+	// 宽松兜底：未知类型按空对象处理
+	return &typeResponse{
+		Body:       map[string]string{},
+		Properties: typeProperties{BaseType: "System.Object"},
+	}, true
 }
 
-// getStructure 返回给定 C# 类型名的默认实例；未知类型返回 ok=false。
+// getStructure 返回给定 C# 类型名的默认实例；未知类型返回空对象（对应容器类型的空结构）。
 func getStructure(typeName string) (any, bool) {
 	switch typeName {
 	case "ArchiSteamFarm.Steam.Storage.BotConfig":
@@ -301,5 +308,5 @@ func getStructure(typeName string) (any, bool) {
 	case "ArchiSteamFarm.Storage.GlobalConfig":
 		return config.Defaults(), true
 	}
-	return nil, false
+	return map[string]any{}, true
 }
