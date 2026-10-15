@@ -1304,6 +1304,11 @@ func (b *Bot) statusText() string {
 	return text
 }
 
+// IsFarming 返回卡牌挂机是否正在运行。
+func (b *Bot) IsFarming() bool {
+	return b.cardsFarmer != nil && b.cardsFarmer.IsRunning()
+}
+
 // FarmingGames 返回当前挂机游戏列表。
 func (b *Bot) FarmingGames() []GameInfo {
 	if b.cardsFarmer == nil {
