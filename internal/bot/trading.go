@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -160,6 +161,19 @@ func (b *Bot) handleTradeOffer(offer trading.TradeOffer) {
 	case acceptGifts && isGift:
 		shouldAccept = true
 		reason = "礼物"
+	case prefs.Has(config.TradingPreferencesMatchMakingOnly):
+		// 匹配交易：对方有提供物品，且我方给出的所有物品类型都在 MatchableTypes 中
+		if len(offer.ItemsToReceive) > 0 {
+			matchable, err := b.itemsMatchable(offer.ItemsToGive)
+			if err != nil {
+				b.Log.Warn("检查匹配物品失败: %v", err)
+				return
+			}
+			if matchable {
+				shouldAccept = true
+				reason = "匹配交易"
+			}
+		}
 	case prefs.Has(config.TradingPreferencesSteamlvlLimit):
 		// SteamlvlLimit：需要查询对方等级；无 API Key 时忽略该限制
 		level, err := fetchSteamLevel(b, partnerSteamID)
@@ -181,6 +195,56 @@ func (b *Bot) handleTradeOffer(offer trading.TradeOffer) {
 	} else {
 		b.Log.Info("忽略报价 %d（不满足接受条件）", offer.TradeOfferID)
 	}
+}
+
+// itemsMatchable 检查报价中我方给出的所有物品类型是否都在 MatchableTypes 中。
+// 通过库存 ClassID 到物品类型的映射判断。
+func (b *Bot) itemsMatchable(items []trading.TradeAsset) (bool, error) {
+	if len(items) == 0 {
+		return true, nil
+	}
+
+	type inventoryKey struct {
+		appID     uint32
+		contextID uint64
+	}
+	classIDsByKey := make(map[inventoryKey][]uint64)
+	for _, it := range items {
+		ctx, err := strconv.ParseUint(it.ContextID, 10, 64)
+		if err != nil {
+			return false, fmt.Errorf("解析 contextID %q 失败: %w", it.ContextID, err)
+		}
+		key := inventoryKey{appID: it.AppID, contextID: ctx}
+		classIDsByKey[key] = append(classIDsByKey[key], it.ClassID)
+	}
+
+	for key, classIDs := range classIDsByKey {
+		inv, err := b.GetInventory(key.appID, key.contextID)
+		if err != nil {
+			return false, err
+		}
+		typeByClass := make(map[uint64]string, len(inv.Items))
+		for _, item := range inv.Items {
+			typeByClass[item.ClassID] = item.Type
+		}
+		for _, classID := range classIDs {
+			if !matchableType(b.Config.MatchableTypes, typeByClass[classID]) {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
+// matchableType 判断物品类型是否在可匹配类型列表中（忽略空格，如 "Trading Card" -> "TradingCard"）。
+func matchableType(matchable []config.AssetType, itemType string) bool {
+	normalized := strings.ReplaceAll(itemType, " ", "")
+	for _, mt := range matchable {
+		if string(mt) == normalized {
+			return true
+		}
+	}
+	return false
 }
 
 // containsUint64 判断切片中是否包含目标值。

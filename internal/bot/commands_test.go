@@ -106,3 +106,20 @@ func TestCommandPermissionDenied(t *testing.T) {
 		t.Errorf("无权限用户调用 !password 应被拒绝，实际: %q", reply)
 	}
 }
+func TestMatchableType(t *testing.T) {
+	matchable := []config.AssetType{config.AssetTypeTradingCard, config.AssetTypeFoilTradingCard}
+	cases := []struct {
+		itemType string
+		expected bool
+	}{
+		{"Trading Card", true},
+		{"Foil Trading Card", true},
+		{"Booster Pack", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := matchableType(matchable, tc.itemType); got != tc.expected {
+			t.Errorf("matchableType(%q) = %v, 期望 %v", tc.itemType, got, tc.expected)
+		}
+	}
+}
