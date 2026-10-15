@@ -24,6 +24,31 @@ const (
 // PersonaState 对应 C# EPersonaState 枚举。
 type PersonaState string
 
+// FlexString 是兼容数字/字符串/布尔值的宽松字符串类型。
+// 原版 ASF 的位标志枚举（如 EFarmingPreferences）序列化为数字，我们的配置模型用字符串表示，
+// 使用 FlexString 可同时接受两种形式而不丢失值。
+type FlexString string
+
+// UnmarshalJSON 接受字符串、数字、布尔值并统一存为字符串。
+func (s *FlexString) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*s = FlexString(str)
+		return nil
+	}
+	var num json.Number
+	if err := json.Unmarshal(data, &num); err == nil {
+		*s = FlexString(num.String())
+		return nil
+	}
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		*s = FlexString(fmt.Sprintf("%v", b))
+		return nil
+	}
+	return nil
+}
+
 const (
 	PersonaStateOffline       PersonaState = "Offline"
 	PersonaStateOnline        PersonaState = "Online"
@@ -106,7 +131,7 @@ type BotConfig struct {
 	CustomGamePlayedWhileIdle    string             `json:"CustomGamePlayedWhileIdle"`
 	Enabled                      bool               `json:"Enabled"`
 	FarmingOrders                []string           `json:"FarmingOrders"`
-	FarmingPreferences           string             `json:"FarmingPreferences"`
+	FarmingPreferences           FlexString         `json:"FarmingPreferences"`
 	FarmingBlacklist             []uint32           `json:"FarmingBlacklist"`
 	FarmingQueue                 []uint32           `json:"FarmingQueue"`
 	GamesPlayedWhileIdle         []uint             `json:"GamesPlayedWhileIdle"`
@@ -118,8 +143,8 @@ type BotConfig struct {
 	OnlineFlags                  uint64             `json:"OnlineFlags"`
 	OnlineStatus                 PersonaState       `json:"OnlineStatus"`
 	PasswordFormat               string             `json:"PasswordFormat"`
-	RedeemingPreferences         string             `json:"RedeemingPreferences"`
-	RemoteCommunication          string             `json:"RemoteCommunication"`
+	RedeemingPreferences         FlexString         `json:"RedeemingPreferences"`
+	RemoteCommunication          FlexString         `json:"RemoteCommunication"`
 	SendTradePeriod              uint8              `json:"SendTradePeriod"`
 	SteamLogin                   string             `json:"SteamLogin"`
 	SteamMasterClanID            uint64             `json:"SteamMasterClanID"`
