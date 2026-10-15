@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	asfcrypto "github.com/asf-go/asf/internal/crypto"
 	"github.com/asf-go/asf/internal/authenticator"
 	"github.com/asf-go/asf/internal/store"
 )
@@ -194,11 +195,11 @@ func (b *Bot) loadLoginKey() string {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return ""
 	}
-	return f.LoginKey
+	return asfcrypto.DecryptLoginKey(f.LoginKey)
 }
 
 func (b *Bot) saveLoginKey() {
-	f := loginKeyFile{LoginKey: b.loginKey}
+	f := loginKeyFile{LoginKey: asfcrypto.EncryptLoginKey(b.loginKey)}
 	data, err := json.MarshalIndent(&f, "", "\t")
 	if err != nil {
 		return

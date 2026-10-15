@@ -2,6 +2,8 @@ package bot
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -25,12 +27,21 @@ func (b *Bot) checkAccess(chatterID uint64, min config.Access) bool {
 // handleCommand 处理 Steam 聊天命令（以 CommandPrefix 开头）。
 
 func (b *Bot) handleCommand(chatterID uint64, message string) {
+	reply := b.handleCommandText(chatterID, message)
+	if b.steamClient != nil {
+		b.steamClient.SendChatMessage(chatterID, reply)
+	}
+}
+
+// handleCommandText 处理命令并返回回复文本（不发送，便于测试）。
+
+func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 	prefix := b.CommandPrefix
 	if prefix == "" {
 		prefix = "!"
 	}
 	if !strings.HasPrefix(message, prefix) {
-		return
+		return ""
 	}
 	command := strings.TrimSpace(strings.TrimPrefix(message, prefix))
 	lower := strings.ToLower(command)
@@ -41,7 +52,7 @@ func (b *Bot) handleCommand(chatterID uint64, message string) {
 
 	switch {
 	case lower == "help":
-		reply = "可用命令: status, pause, resume, farm, restart, unpack, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
+		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, mafile, password, keys, batch <key...>, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
 	case lower == "status":
 		if !b.checkAccess(chatterID, config.AccessOperator) {
 			reply = "权限不足"
@@ -132,6 +143,84 @@ func (b *Bot) handleCommand(chatterID uint64, message string) {
 		} else {
 			reply = fmt.Sprintf("已打开 %d 个补充包", opened)
 		}
+	case lower == "2fa":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		code, err := b.TwoFactorCode()
+		if err != nil {
+			reply = fmt.Sprintf("获取 2FA 代码失败: %v", err)
+		} else {
+			reply = "当前 2FA 代码: " + code
+		}
+	case lower == "mafile" || strings.HasPrefix(lower, "mafile "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		args := strings.Fields(command[len("mafile"):])
+		if len(args) < 2 {
+			if b.HasAuthenticator() {
+				reply = "已配置移动令牌（device_id: " + b.Auth().DeviceID + "），用法: mafile <shared_secret> <identity_secret> [device_id]"
+			} else {
+				reply = "未配置移动令牌，用法: mafile <shared_secret> <identity_secret> [device_id]"
+			}
+			break
+		}
+		deviceID := ""
+		if len(args) >= 3 {
+			deviceID = args[2]
+		}
+		if err := b.ImportAuthenticator(args[0], args[1], deviceID); err != nil {
+			reply = fmt.Sprintf("导入移动令牌失败: %v", err)
+		} else {
+			reply = "移动令牌已导入"
+		}
+	case lower == "password" || strings.HasPrefix(lower, "password "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		newPassword := strings.TrimSpace(command[len("password"):])
+		if newPassword == "" {
+			reply = "用法: password <新密码>"
+			break
+		}
+		b.Config.SteamPassword = newPassword
+		if err := b.saveConfig(); err != nil {
+			reply = fmt.Sprintf("保存密码失败: %v", err)
+		} else {
+			reply = "Steam 密码已更新"
+		}
+	case lower == "keys":
+		if !b.checkAccess(chatterID, config.AccessOperator) {
+			reply = "权限不足"
+			break
+		}
+		bgrPath := filepath.Join(b.configDir, b.Name+".games-to-redeem-in-background")
+		data, err := os.ReadFile(bgrPath)
+		if err != nil {
+			reply = "后台兑换列表为空"
+		} else {
+			keysList := strings.Fields(string(data))
+			if len(keysList) == 0 {
+				reply = "后台兑换列表为空"
+			} else {
+				reply = "后台兑换密钥 (" + strconv.Itoa(len(keysList)) + "): " + strings.Join(keysList, ", ")
+			}
+		}
+	case lower == "batch" || strings.HasPrefix(lower, "batch "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		keysList := strings.Fields(command[len("batch"):])
+		if len(keysList) == 0 {
+			reply = "用法: batch <CDKey...>"
+			break
+		}
+		reply, _ = b.Redeem(keysList)
 	case lower == "fb":
 		if !b.checkAccess(chatterID, config.AccessMaster) {
 			reply = "权限不足"
@@ -369,9 +458,7 @@ func (b *Bot) handleCommand(chatterID uint64, message string) {
 		reply = "未知命令。发送 !help 查看帮助。"
 	}
 
-	if b.steamClient != nil {
-		b.steamClient.SendChatMessage(chatterID, reply)
-	}
+	return reply
 }
 
 // statusText 生成 Bot 状态文本。
