@@ -2,6 +2,7 @@
 package ipc
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -29,6 +30,9 @@ import (
 	"github.com/asf-go/asf/internal/store"
 	"github.com/asf-go/asf/internal/web"
 )
+
+// originalPathKey 用于在上下文中传递原始（未小写化）请求路径。
+type originalPathKey struct{}
 
 // Server 是 ASF IPC HTTP 服务。
 type Server struct {
@@ -89,7 +93,7 @@ func (s *Server) Start(addr string) error {
 		// CORS：ASF-ui 携带 X-APIKey 自定义头，需要处理预检
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authentication, X-APIKey, Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Authentication, Content-Type, Authorization")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -98,7 +102,8 @@ func (s *Server) Start(addr string) error {
 
 		lower := strings.ToLower(r.URL.Path)
 		if strings.HasPrefix(lower, "/api/") {
-			r2 := r.Clone(r.Context())
+			ctx := context.WithValue(r.Context(), originalPathKey{}, r.URL.Path)
+			r2 := r.WithContext(ctx)
 			r2.URL.Path = lower
 			apiMux.ServeHTTP(w, r2)
 			return
@@ -126,7 +131,7 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-// auth 认证中间件：支持 X-APIKey 头、query password 与 Basic Auth 三种方式（兼容 ASF-ui 与原版 ASF）。
+// auth 认证中间件：支持 Authentication 头、query password 与 Basic Auth（对齐原版 ASF-ui 认证）。
 // 无密码时仅允许回环地址访问；认证失败连续达到阈值后封禁该 IP，每小时自动解封。
 func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -144,11 +149,8 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// ASF-ui 与原版 ASF 使用 Authentication 头传递 IPC 密码；同时兼容 X-APIKey 与 query password
+		// ASF-ui 与原版 ASF 使用 Authentication 头传递 IPC 密码；同时兼容 query password
 		apiKey := r.Header.Get("Authentication")
-		if apiKey == "" {
-			apiKey = r.Header.Get("X-APIKey")
-		}
 		if apiKey == "" {
 			apiKey = r.URL.Query().Get("password")
 		}
@@ -312,7 +314,11 @@ func (s *Server) handleAPI404(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePlugins 返回已加载插件列表（对应原版 PluginsController，字段 PascalCase）。
-func (s *Server) handlePlugins(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handlePlugins(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "仅支持 GET"})
+		return
+	}
 	plugins := s.asf.Plugins.Plugins()
 	result := make([]map[string]any, 0, len(plugins))
 	for _, p := range plugins {
@@ -516,18 +522,39 @@ func (s *Server) handleASF(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "仅支持 GET/POST"})
 		return
 	}
 
 	sub := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/asf"), "/")
-	switch sub {
+	switch strings.ToLower(sub) {
+	case "version":
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": core.Version})
+		return
+	case "buildvariant":
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": "generic"})
+		return
 	case "currencycodes":
 		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{"CurrencyCodes": currencyCodes()}})
 		return
 	case "updatesenabled":
 		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{"UpdatesEnabled": true}})
+		return
+	case "canupdate":
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": true})
+		return
+	case "memory":
+		var memStats runtime.MemStats
+		runtime.ReadMemStats(&memStats)
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": memStats.Alloc / 1024})
+		return
+	case "uptime":
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": time.Since(s.asf.StartTime()).String()})
+		return
+	case "hash", "encrypt", "confirmations":
+		// 原版这些端点为 POST 语义，GET 应返回 405
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "请使用 POST 方法"})
 		return
 	}
 
@@ -558,9 +585,22 @@ func (s *Server) handleASF(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/bot/")
-	path = strings.Trim(path, "/")
-	parts := strings.Split(path, "/")
+	// 从原始路径提取 bot 名（保留大小写，对齐原版大小写敏感行为）
+	origPath, _ := r.Context().Value(originalPathKey{}).(string)
+	if origPath == "" {
+		origPath = r.URL.Path
+	}
+	lowerPath := strings.ToLower(origPath)
+	idx := strings.Index(lowerPath, "/api/bot/")
+	var parts []string
+	if idx >= 0 {
+		rest := origPath[idx+len("/api/bot/"):]
+		parts = strings.Split(rest, "/")
+	} else {
+		path := strings.TrimPrefix(r.URL.Path, "/api/bot/")
+		path = strings.Trim(path, "/")
+		parts = strings.Split(path, "/")
+	}
 	if len(parts) == 0 || parts[0] == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "缺少 Bot 名称"})
 		return
@@ -609,6 +649,31 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 		case "bgr":
 			action = "gamesToRedeeminbackground"
 		}
+
+		// 原版路径格式：GET /api/bot/{name}/Inventory/{appID}/{contextID}
+		if strings.HasPrefix(strings.ToLower(action), "inventory/") {
+			invParts := strings.Split(action, "/")
+			appID := uint32(753)
+			contextID := uint64(6)
+			if len(invParts) >= 2 {
+				if v, err := parseUint32(invParts[1]); err == nil {
+					appID = v
+				}
+			}
+			if len(invParts) >= 3 {
+				if v, err := parseUint64(invParts[2]); err == nil {
+					contextID = v
+				}
+			}
+			inv, err := b.GetInventory(appID, contextID)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": inv})
+			return
+		}
+
 		switch key := strings.ToLower(r.Method + " " + action); key {
 		case "post pause":
 			b.Pause()
@@ -642,6 +707,22 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已删除"})
+		case "post removelicense":
+			// 移除许可需要 CM 协议（SteamApps.RemoveLicense），暂未实现
+			writeJSON(w, http.StatusOK, map[string]any{"Success": false, "Message": "暂不支持移除许可"})
+		case "post rename":
+			var req struct {
+				NewName string `json:"newName"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.NewName == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "缺少新名称"})
+				return
+			}
+			if err := s.asf.RenameBot(botName, req.NewName); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已重命名"})
 		case "get gamestofarm":
 			games := b.FarmingGames()
 			list := make([]map[string]any, 0, len(games))
@@ -909,6 +990,10 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 
 // handleBots 返回机器人列表/统计（兼容 ASF-ui 与第三方工具的 /api/bots 系列路径）。
 func (s *Server) handleBots(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"Success": false, "Message": "仅支持 GET"})
+		return
+	}
 	bots := s.asf.Bots()
 	sub := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/bots"), "/")
 
@@ -964,8 +1049,7 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": "全部恢复"})
 	case "exit":
-		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": "退出命令已收到"})
-		go func() { _ = s.asf.Stop() }()
+		writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "已禁止远程退出，请在服务器上管理 ASF 进程"})
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "未知命令"})
 	}

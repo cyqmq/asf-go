@@ -41,6 +41,15 @@ func NewGitHubClient() *GitHubClient {
 	}
 }
 
+// githubAuthHeader 返回 GitHub 请求的 Authorization 头（支持 GITHUB_TOKEN 环境变量以规避限流）。
+func githubAuthHeader() string {
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		return ""
+	}
+	return "Bearer " + token
+}
+
 // GetLatestRelease 获取指定仓库的最新 Release。
 func (g *GitHubClient) GetLatestRelease(owner, repo string, stable bool) (*GitHubRelease, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
@@ -50,6 +59,9 @@ func (g *GitHubClient) GetLatestRelease(owner, repo string, stable bool) (*GitHu
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "asf-go")
+	if auth := githubAuthHeader(); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
 
 	resp, err := g.http.Do(req)
 	if err != nil {
@@ -79,6 +91,9 @@ func (g *GitHubClient) GetRelease(owner, repo, tag string) (*GitHubRelease, erro
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "asf-go")
+	if auth := githubAuthHeader(); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
 
 	resp, err := g.http.Do(req)
 	if err != nil {

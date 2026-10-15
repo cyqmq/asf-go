@@ -210,6 +210,27 @@ func (a *ASF) RemoveBot(botName string) error {
 	return nil
 }
 
+// RenameBot 重命名指定 Bot（对应原版 BotController /Rename）。
+func (a *ASF) RenameBot(oldName, newName string) error {
+	if oldName == "" || newName == "" {
+		return fmt.Errorf("Bot 名称不能为空")
+	}
+	b, ok := a.bots[oldName]
+	if !ok {
+		return fmt.Errorf("Bot %s 不存在", oldName)
+	}
+	oldPath := filepath.Join(a.ConfigPath, oldName+".json")
+	newPath := filepath.Join(a.ConfigPath, newName+".json")
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("重命名配置文件失败: %w", err)
+	}
+	_ = os.Rename(filepath.Join(a.ConfigPath, oldName+".maFile.json"), filepath.Join(a.ConfigPath, newName+".maFile.json"))
+	delete(a.bots, oldName)
+	b.Name = newName
+	a.bots[newName] = b
+	return nil
+}
+
 // Stop 停止所有 Bot 并关闭日志。
 func (a *ASF) Stop() error {
 	a.Log.Info("ASF 正在关闭")
