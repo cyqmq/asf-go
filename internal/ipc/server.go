@@ -636,18 +636,18 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	botName := parts[0]
-	b, ok := s.asf.Bots()[botName]
-	if !ok {
-		// 原版 BotController 对不存在的 bot 返回 200 + 空字典（仅 GET 列表场景）
-		if r.Method == http.MethodGet && len(parts) == 1 {
-			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{}})
-			return
+
+	// GET /api/bot/ASF：返回所有 Bot 的映射（原版 Bot.GetBots 对 "ASF"/"@ALL" 的特殊处理，ASF-ui 依赖此端点轮询列表）
+	if len(parts) == 1 && strings.EqualFold(botName, "ASF") && r.Method == http.MethodGet {
+		result := make(map[string]any)
+		for name, bot := range s.asf.Bots() {
+			result[name] = botStatusMap(bot)
 		}
-		writeJSON(w, http.StatusNotFound, map[string]any{"Success": false, "Message": "Bot 不存在"})
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": result})
 		return
 	}
 
-	// POST /api/bot/{name}：保存 Bot 配置（对应原版 BotPost）
+	// POST /api/bot/{name}：创建或更新 Bot 配置（原版 BotPost 允许新建，ASF-ui 新建机器人依赖此端点）
 	if r.Method == http.MethodPost && len(parts) == 1 {
 		var req struct {
 			BotConfig *config.BotConfig `json:"botConfig"`
@@ -660,6 +660,24 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": err.Error()})
 			return
 		}
+		// 原版 BotPost 返回 GenericResponse<IReadOnlyDictionary<string, bool>>，Result 为 botName -> 是否保存成功
+		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]bool{botName: true}})
+		return
+	}
+
+	b, ok := s.asf.Bots()[botName]
+	if !ok {
+		// 原版 BotController 对不存在的 bot 返回 200 + 空字典（仅 GET 列表场景）
+		if r.Method == http.MethodGet && len(parts) == 1 {
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": map[string]any{}})
+			return
+		}
+		writeJSON(w, http.StatusNotFound, map[string]any{"Success": false, "Message": "Bot 不存在"})
+		return
+	}
+
+	// 保留兼容：POST /api/bot/{name} 且无 body 时视为空配置（一般不会到达此处）
+	if r.Method == http.MethodPost && len(parts) == 1 {
 		writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已保存"})
 		return
 	}

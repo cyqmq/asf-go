@@ -135,35 +135,43 @@ func (a *ASF) loadBots() error {
 			a.Log.Warn("加载 Bot 配置 %s 失败: %v", botName, err)
 			continue
 		}
-		b, err := bot.New(botName, cfg, a.ConfigPath)
-		if err != nil {
+		if err := a.initializeBot(botName, cfg); err != nil {
 			a.Log.Warn("创建 Bot %s 失败: %v", botName, err)
 			continue
 		}
-		b.CommandPrefix = a.Config.CommandPrefix
-		b.SteamAPIKey = a.Config.SteamWebApiKey
-		b.OwnerSteamID = a.Config.SteamOwnerID
-		b.ASFVersion = Version
-		b.OnExit = func() { go func() { _ = a.Stop() }() }
-		b.FindBotSteamID = func(name string) uint64 {
-			for n, bb := range a.bots {
-				if strings.EqualFold(n, name) {
-					if bb.IsConnected() {
-						return bb.SteamID()
-					}
-					return 0
-				}
-			}
-			return 0
-		}
-		blacklist := make([]uint64, 0, len(a.Config.Blacklist))
-		for _, id := range a.Config.Blacklist {
-			blacklist = append(blacklist, uint64(id))
-		}
-		b.Blacklist = blacklist
-		a.bots[botName] = b
 		a.Log.Info("已加载 Bot 配置: %s (启用=%v)", botName, cfg.Enabled)
 	}
+	return nil
+}
+
+// initializeBot 创建并初始化一个 Bot 实例（设置回调、绑定全局配置并加入 bots map）。
+func (a *ASF) initializeBot(botName string, cfg *config.BotConfig) error {
+	b, err := bot.New(botName, cfg, a.ConfigPath)
+	if err != nil {
+		return fmt.Errorf("创建 Bot %s 失败: %w", botName, err)
+	}
+	b.CommandPrefix = a.Config.CommandPrefix
+	b.SteamAPIKey = a.Config.SteamWebApiKey
+	b.OwnerSteamID = a.Config.SteamOwnerID
+	b.ASFVersion = Version
+	b.OnExit = func() { go func() { _ = a.Stop() }() }
+	b.FindBotSteamID = func(name string) uint64 {
+		for n, bb := range a.bots {
+			if strings.EqualFold(n, name) {
+				if bb.IsConnected() {
+					return bb.SteamID()
+				}
+				return 0
+			}
+		}
+		return 0
+	}
+	blacklist := make([]uint64, 0, len(a.Config.Blacklist))
+	for _, id := range a.Config.Blacklist {
+		blacklist = append(blacklist, uint64(id))
+	}
+	b.Blacklist = blacklist
+	a.bots[botName] = b
 	return nil
 }
 
@@ -181,7 +189,7 @@ func (a *ASF) UpdateGlobalConfig(cfg *config.GlobalConfig) error {
 	return cfg.Save(filepath.Join(a.ConfigPath, "ASF.json"))
 }
 
-// UpdateBotConfig 更新指定 Bot 的配置并保存（对应 IPC POST /api/Bot/{name}）。
+// UpdateBotConfig 更新指定 Bot 的配置并保存；若 Bot 不存在则创建新 Bot（对应原版 POST /api/Bot/{name} 的创建/更新语义）。
 func (a *ASF) UpdateBotConfig(botName string, cfg *config.BotConfig) error {
 	if botName == "" {
 		return fmt.Errorf("Bot 名称为空")
@@ -189,12 +197,24 @@ func (a *ASF) UpdateBotConfig(botName string, cfg *config.BotConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("Bot 配置为空")
 	}
-	b, ok := a.bots[botName]
-	if !ok {
-		return fmt.Errorf("Bot %s 不存在", botName)
+	if b, ok := a.bots[botName]; ok {
+		b.Config = cfg
+		return cfg.Save(filepath.Join(a.ConfigPath, botName+".json"))
 	}
-	b.Config = cfg
-	return cfg.Save(filepath.Join(a.ConfigPath, botName+".json"))
+	// 新 Bot：先写配置文件，再初始化加入内存并启动（原版 ASF 保存配置后会自动初始化/启动新 Bot）
+	if err := cfg.Save(filepath.Join(a.ConfigPath, botName+".json")); err != nil {
+		return fmt.Errorf("保存 Bot 配置失败: %w", err)
+	}
+	if err := a.initializeBot(botName, cfg); err != nil {
+		return err
+	}
+	go func() {
+		if err := a.bots[botName].Start(); err != nil {
+			a.Log.Error("Bot %s 启动失败: %v", botName, err)
+		}
+	}()
+	a.Log.Info("已创建 Bot 配置: %s", botName)
+	return nil
 }
 
 // RemoveBot 停止并删除指定 Bot（对应 IPC DELETE/POST /api/Bot/{name}/delete）。
