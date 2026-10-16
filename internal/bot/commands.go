@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -52,7 +53,7 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 
 	switch {
 	case lower == "help":
-		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, mafile, password, keys, batch <key...>, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
+		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, 2faok, 2fano, mafile, password, keys, batch <key...>, inventory, play <appid...>, input <code>, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
 	case lower == "status":
 		if !b.checkAccess(chatterID, config.AccessOperator) {
 			reply = "权限不足"
@@ -221,6 +222,107 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 			break
 		}
 		reply, _ = b.Redeem(keysList)
+	case lower == "inventory":
+		if !b.checkAccess(chatterID, config.AccessOperator) {
+			reply = "权限不足"
+			break
+		}
+		inv, err := b.GetInventory(753, 6)
+		if err != nil {
+			reply = fmt.Sprintf("查询库存失败: %v", err)
+			break
+		}
+		if len(inv.Items) == 0 {
+			reply = "库存为空"
+			break
+		}
+		counts := make(map[string]uint64)
+		for _, item := range inv.Items {
+			counts[item.Name] += item.Amount
+		}
+		names := make([]string, 0, len(counts))
+		for name := range counts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		lines := make([]string, 0, len(names))
+		for _, name := range names {
+			lines = append(lines, fmt.Sprintf("%s x%d", name, counts[name]))
+		}
+		reply = "库存 (753/6):\n" + strings.Join(lines, "\n")
+	case lower == "play" || strings.HasPrefix(lower, "play "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		arg := strings.TrimSpace(command[len("play"):])
+		if arg == "" {
+			b.Resume()
+			reply = "已恢复自动挂机"
+			break
+		}
+		var appIDs []uint64
+		valid := true
+		for _, f := range strings.Fields(arg) {
+			id, err := strconv.ParseUint(f, 10, 32)
+			if err != nil {
+				reply = "无效 appid: " + f
+				valid = false
+				break
+			}
+			appIDs = append(appIDs, id)
+		}
+		if valid {
+			if b.steamClient != nil {
+				b.steamClient.StartPlaying(appIDs)
+				reply = fmt.Sprintf("正在游玩 %d 个游戏", len(appIDs))
+			} else {
+				reply = "Steam 客户端未就绪"
+			}
+		}
+	case lower == "2faok" || lower == "2fano":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		confirmations, err := b.GetConfirmations()
+		if err != nil {
+			reply = fmt.Sprintf("获取确认失败: %v", err)
+			break
+		}
+		if len(confirmations) == 0 {
+			reply = "没有待确认项"
+			break
+		}
+		accept := lower == "2faok"
+		ok, err := b.HandleConfirmations(accept, confirmations)
+		if err != nil {
+			reply = fmt.Sprintf("处理确认失败: %v", err)
+			break
+		}
+		if accept {
+			reply = fmt.Sprintf("已接受 %d 个确认", len(confirmations))
+		} else {
+			reply = fmt.Sprintf("已拒绝 %d 个确认", len(confirmations))
+		}
+		if !ok {
+			reply += "（部分操作未成功）"
+		}
+	case lower == "input" || strings.HasPrefix(lower, "input "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		code := strings.TrimSpace(command[len("input"):])
+		if code == "" {
+			reply = "用法: !input <Steam Guard/2FA 验证码>"
+			break
+		}
+		if err := b.SubmitInput(code); err != nil {
+			reply = fmt.Sprintf("提交验证码失败: %v", err)
+		} else {
+			reply = "验证码已设置，正在重新登录..."
+		}
 	case lower == "fb":
 		if !b.checkAccess(chatterID, config.AccessMaster) {
 			reply = "权限不足"

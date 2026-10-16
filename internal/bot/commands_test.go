@@ -179,3 +179,51 @@ func TestStatePersistence(t *testing.T) {
 		t.Errorf("恢复的游戏数据不正确: %+v", loaded[0])
 	}
 }
+
+func TestCommandPlayEmpty(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!play")
+	if !strings.Contains(reply, "恢复自动挂机") {
+		t.Errorf("!play 空参数应恢复挂机，实际: %q", reply)
+	}
+}
+
+func TestCommandPlayNoClient(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!play 730")
+	if !strings.Contains(reply, "未就绪") {
+		t.Errorf("无 steamClient 时应提示未就绪，实际: %q", reply)
+	}
+}
+
+func TestCommandInputEmpty(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!input")
+	if !strings.Contains(reply, "用法") {
+		t.Errorf("!input 空参数应提示用法，实际: %q", reply)
+	}
+}
+
+func TestCommandInputNoClient(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!input 12345")
+	if !strings.Contains(reply, "未就绪") {
+		t.Errorf("无 steamClient 时应提示未就绪，实际: %q", reply)
+	}
+}
+
+func TestCommand2FAOkWithoutAuthenticator(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!2faok")
+	if !strings.Contains(reply, "获取确认失败") {
+		t.Errorf("未配置验证器时 !2faok 应报错，实际: %q", reply)
+	}
+}
+
+func TestCommandInventoryNoClient(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!inventory")
+	if !strings.Contains(reply, "查询库存失败") {
+		t.Errorf("无连接时 !inventory 应报错，实际: %q", reply)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -263,6 +264,20 @@ func (b *Bot) stopModules() {
 	if b.steamClient != nil {
 		b.steamClient.Disconnect()
 	}
+}
+
+// SubmitInput 提交登录验证码（Steam Guard/2FA），设置后触发自动重连。
+// 供聊天命令 !input 与 IPC /api/bot/{name}/input 使用。
+func (b *Bot) SubmitInput(code string) error {
+	if b.steamClient == nil {
+		return fmt.Errorf("Steam 客户端未就绪")
+	}
+	if strings.TrimSpace(code) == "" {
+		return fmt.Errorf("验证码为空")
+	}
+	b.steamClient.SetAuthCode(strings.TrimSpace(code))
+	go b.scheduleReconnect()
+	return nil
 }
 
 // scheduleReconnect 在断线后按指数退避自动重连（最多 5 次，间隔 1s/2s/4s/.../60s）。

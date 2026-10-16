@@ -277,8 +277,20 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 			_ = os.Remove(bgrPath)
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已删除"})
 		case "post input":
-			// 交互式输入暂不支持
-			writeJSON(w, http.StatusOK, map[string]any{"Success": false, "Message": "暂不支持交互式输入"})
+			// 提交登录验证码（对应原版 BotInputRequest，原版支持 SteamGuard/2FA 输入）
+			var req struct {
+				Type  string `json:"type"`
+				Value string `json:"value"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Value) == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "缺少验证码 value"})
+				return
+			}
+			if err := b.SubmitInput(req.Value); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "验证码已设置，正在重新登录"})
 		case "get 2fa":
 			code, err := b.TwoFactorCode()
 			if err != nil {
