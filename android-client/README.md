@@ -28,16 +28,19 @@ cd android && ./gradlew assembleDebug
 # 产物：android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## 对接 asf-go IPC（已接入）
+## 内置服务端 + IPC（已接入）
 
-- `app.js` 已接入真实 IPC：
-  - `GET /api/asf`：连接验证（测试连接/启动服务）、刷新机器人数量与挂机状态。
-  - `POST /api/command`：命令控制台发送 status/pause/resume/stats 等命令并显示真实返回。
+- **内置 asf-go 服务端**：CI 构建时将 asf-go 交叉编译为 Android arm64 二进制（`GOOS=android CGO_ENABLED=0`）打包进 APK assets。
+  - Capacitor 原生插件 `AsfGoPlugin`：首次启动解压二进制到应用私有目录，写入默认 `ASF.json`（IPC 开启、密码可配），以 `--ipc-addr 127.0.0.1:1242` 启动子进程。
+  - UI「启动 ASF 服务」按钮：调用插件启动内置服务 → 轮询 `GET /api/asf` 直到 IPC 就绪。
+- **远程服务器模式**：无原生插件（浏览器预览）或配置了远程地址时，连接外部 asf-go。
+- IPC 调用：
+  - `GET /api/asf`：连接验证、刷新机器人数量与挂机状态。
+  - `POST /api/command`：命令控制台真实执行命令。
   - `Authentication: <IPC 密码>` 头（与 ASF-ui 相同认证方式）。
-- 连接失败时自动进入**演示模式**（保留示例数据，可配置真实服务器后重试）。
-- 设置页可保存服务器地址/端口/IPC 密码（localStorage）。
-- Android 已允许 cleartext HTTP（`android:usesCleartextTraffic="true"`），`androidScheme` 设为 `http` 以访问局域网内 asf-go 服务。
-- asf-go 默认 CORS 允许所有来源；如需限制请在 `GlobalConfig.IPCOrigins` 配置。
+- 连接失败自动进入**演示模式**。
+- 设置页可保存服务器地址/端口/IPC 密码（localStorage；内置服务默认 127.0.0.1:1242/testpass）。
+- Android 已允许 cleartext HTTP（`android:usesCleartextTraffic="true"`），`androidScheme` 设为 `http`。
 
 ## CI 构建
 

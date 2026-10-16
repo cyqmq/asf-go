@@ -168,21 +168,71 @@
     });
   }
 
+  /* ─── 内置服务端（Capacitor 原生插件） ─── */
+  function hasNativePlugin() {
+    return !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AsfGo);
+  }
+
+  async function ensureLocalServer() {
+    if (!hasNativePlugin()) return false;
+    try {
+      var pass = getSettings().password || "testpass";
+      await window.Capacitor.Plugins.AsfGo.start({ password: pass });
+      addLog("INFO", "已启动内置 asf-go 服务端 (127.0.0.1:1242)");
+      return true;
+    } catch (e) {
+      addLog("ERROR", "启动内置 asf-go 失败: " + e.message);
+      return false;
+    }
+  }
+
+  async function stopLocalServer() {
+    if (!hasNativePlugin()) return;
+    try {
+      await window.Capacitor.Plugins.AsfGo.stop();
+      addLog("INFO", "已停止内置 asf-go 服务端");
+    } catch (e) {
+      addLog("WARN", "停止内置服务失败: " + e.message);
+    }
+  }
+
   /* ─── 服务启动/停止 ─── */
   window.toggleService = async function () {
     if (!serviceRunning) {
-      // 尝试真实连接
+      var localStarted = await ensureLocalServer();
       var ok = false;
-      try {
-        var data = await fetchAsf("/api/asf");
-        ok = !!(data && data.Success);
-        demoMode = false;
-      } catch (e) {
-        ok = false;
+      if (localStarted) {
+        // 内置服务需要时间初始化，轮询等待 IPC 就绪
+        for (var i = 0; i < 8; i++) {
+          await new Promise(function (r) { setTimeout(r, 1000); });
+          try {
+            var data = await fetchAsf("/api/asf");
+            if (data && data.Success) { ok = true; break; }
+          } catch (e) { /* 尚未就绪，继续等待 */ }
+        }
+        demoMode = !ok;
+        if (ok) {
+          addLog("INFO", "内置 asf-go 服务端就绪，IPC 连接成功");
+        } else {
+          addLog("WARN", "内置服务已启动但 IPC 未就绪，进入演示模式");
+        }
+      } else {
+        // 浏览器环境：尝试远程连接
+        try {
+          var data2 = await fetchAsf("/api/asf");
+          ok = !!(data2 && data2.Success);
+          demoMode = !ok;
+        } catch (e) {
+          ok = false;
+          demoMode = true;
+        }
+        if (!ok) {
+          addLog("WARN", "无法连接 asf-go，已进入演示模式（可修改设置页地址后重试）");
+        }
       }
-      if (!ok) {
-        demoMode = true;
-        addLog("WARN", "无法连接 asf-go，已进入演示模式（可修改设置页地址后重试）");
+    } else {
+      if (hasNativePlugin()) {
+        await stopLocalServer();
       }
     }
     serviceRunning = !serviceRunning;
