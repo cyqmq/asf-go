@@ -341,16 +341,16 @@
             <div class="section-label">服务器配置</div>
             <div class="field">
               <label>地址</label>
-              <input type="text" value="127.0.0.1">
+              <input type="text" id="server-host" value="127.0.0.1">
             </div>
             <div class="field-row">
               <div class="field">
                 <label>端口</label>
-                <input type="text" value="1242">
+                <input type="text" id="server-port" value="1242">
               </div>
               <div class="field">
                 <label>IPC 密码</label>
-                <input type="password" value="testpass">
+                <input type="password" id="server-password" value="testpass">
               </div>
             </div>
             <div class="field">
@@ -362,8 +362,8 @@
               <input type="text" value="--ipc-addr 127.0.0.1:1242">
             </div>
             <div class="btn-row">
-              <button class="btn-secondary" onclick="toastMsg('二进制校验通过')">检查二进制</button>
-              <button class="btn-secondary filled" onclick="toastMsg('配置已保存')">保存</button>
+              <button class="btn-secondary" onclick="testConnection()">测试连接</button>
+              <button class="btn-secondary filled" onclick="saveSettings()">保存</button>
             </div>
 
             <div class="section-label">常规</div>
