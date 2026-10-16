@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASF-Go · Android 客户端原型</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>ASF-Go <span>Android 客户端原型</span></h1>
+    <p>基于 asf-go v0.5.0 IPC API 设计 · 可交互演示</p>
+  </div>
+
+  <div class="stage">
+    <div class="phone">
+      <div class="status-bar">
+        <span>09:41</span>
+        <span class="status-icons">📶 🔋</span>
+      </div>
+
+      <div class="screen">
+        <!-- 仪表盘 -->
+        <section class="page active" id="page-dashboard">
+          <div class="appbar">
+            <div class="appbar-title">
+              <span class="logo">⚙️</span> ASF-Go
+            </div>
+            <div class="conn-pill" id="conn-pill">
+              <span class="pill-dot"></span><span id="conn-label">已连接</span>
+            </div>
+          </div>
+          <div class="content">
+            <div class="hero-card">
+              <div class="hero-row">
+                <div>
+                  <div class="hero-version">v0.5.0</div>
+                  <div class="hero-sub">asf-go · Go 版挂卡</div>
+                </div>
+                <div class="hero-badge">✓ 运行中</div>
+              </div>
+              <div class="hero-stats">
+                <div class="stat"><span class="stat-num" id="stat-bots">2</span><span>机器人</span></div>
+                <div class="stat"><span class="stat-num" id="stat-farming">1</span><span>挂机中</span></div>
+                <div class="stat"><span class="stat-num" id="stat-memory">48</span><span>MB</span></div>
+              </div>
+            </div>
+
+            <div class="quick-grid">
+              <button class="quick-btn" onclick="quickAction('start')">▶ 全部启动</button>
+              <button class="quick-btn" onclick="quickAction('pause')">⏸ 全部暂停</button>
+              <button class="quick-btn" onclick="quickAction('resume')">▶ 全部恢复</button>
+              <button class="quick-btn" onclick="quickAction('redeem')">🎁 兑换</button>
+            </div>
+
+            <div class="card">
+              <div class="card-title">📊 实时状态</div>
+              <div class="status-row"><span>IPC 服务</span><span class="ok">● 正常</span></div>
+              <div class="status-row"><span>GitHub 更新</span><span class="ok">● 已是最新</span></div>
+              <div class="status-row"><span>卡牌掉落</span><span class="ok">● 进行中</span></div>
+              <div class="status-row"><span>网络延迟</span><span class="mono">23ms</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 机器人列表 -->
+        <section class="page" id="page-bots">
+          <div class="appbar">
+            <div class="appbar-title">🤖 机器人 <span class="badge" id="bot-count">2</span></div>
+            <button class="mini-btn" onclick="addBot()">＋</button>
+          </div>
+          <div class="content" id="bot-list">
+            <div class="bot-card" onclick="toggleBotDetail('testbot')">
+              <div class="bot-avatar">T</div>
+              <div class="bot-info">
+                <div class="bot-name">testbot</div>
+                <div class="bot-sub" id="bot-sub-testbot">挂机中 · 剩余 5 张卡</div>
+              </div>
+              <div class="bot-status farming" id="bot-status-testbot">挂机中</div>
+            </div>
+            <div class="bot-detail hidden" id="detail-testbot">
+              <div class="detail-row"><span>SteamID</span><span class="mono">7656119…</span></div>
+              <div class="detail-row"><span>当前游戏</span><span>Team Fortress 2</span></div>
+              <div class="detail-row"><span>挂机进度</span><span class="progress"><i style="width:70%"></i></span></div>
+              <div class="detail-actions">
+                <button onclick="botAction('testbot','start')">▶</button>
+                <button onclick="botAction('testbot','pause')">⏸</button>
+                <button onclick="botAction('testbot','resume')">↻</button>
+                <button onclick="botAction('testbot','redeem')">🎁</button>
+              </div>
+            </div>
+
+            <div class="bot-card" onclick="toggleBotDetail('testbot2')">
+              <div class="bot-avatar">T2</div>
+              <div class="bot-info">
+                <div class="bot-name">testbot2</div>
+                <div class="bot-sub" id="bot-sub-testbot2">在线 · 空闲</div>
+              </div>
+              <div class="bot-status online" id="bot-status-testbot2">在线</div>
+            </div>
+            <div class="bot-detail hidden" id="detail-testbot2">
+              <div class="detail-row"><span>SteamID</span><span class="mono">7656119…</span></div>
+              <div class="detail-row"><span>当前游戏</span><span>无</span></div>
+              <div class="detail-row"><span>挂机进度</span><span class="progress"><i style="width:0%"></i></span></div>
+              <div class="detail-actions">
+                <button onclick="botAction('testbot2','start')">▶</button>
+                <button onclick="botAction('testbot2','pause')">⏸</button>
+                <button onclick="botAction('testbot2','resume')">↻</button>
+                <button onclick="botAction('testbot2','redeem')">🎁</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 命令 -->
+        <section class="page" id="page-commands">
+          <div class="appbar">
+            <div class="appbar-title">⌨️ 命令控制台</div>
+          </div>
+          <div class="cmd-output" id="cmd-output">
+            <div class="cmd-line ok">> 连接 asf-go v0.5.0</div>
+            <div class="cmd-line ok">> IPC 握手成功 (auth=ipc)</div>
+            <div class="cmd-line">!status</div>
+            <div class="cmd-result">testbot | 挂机中 | TF2(440):5 | 在线状态: Online<br>testbot2 | 在线 | 当前无挂机游戏</div>
+          </div>
+          <div class="cmd-input">
+            <span class="prefix">!</span>
+            <input type="text" placeholder="输入命令…" id="cmd-input">
+            <button onclick="sendCommand()">发送</button>
+          </div>
+          <div class="quick-cmds">
+            <button onclick="sendQuick('status')">status</button>
+            <button onclick="sendQuick('pause')">pause</button>
+            <button onclick="sendQuick('resume')">resume</button>
+            <button onclick="sendQuick('stats')">stats</button>
+            <button onclick="sendQuick('version')">version</button>
+          </div>
+        </section>
+
+        <!-- 设置 -->
+        <section class="page" id="page-settings">
+          <div class="appbar">
+            <div class="appbar-title">⚙️ 设置</div>
+          </div>
+          <div class="content">
+            <div class="section-title">服务器连接</div>
+            <div class="field"><label>服务器地址</label><input type="text" value="127.0.0.1" id="server-addr"></div>
+            <div class="field"><label>端口</label><input type="text" value="1242" id="server-port" oninput="updateConn()"></div>
+            <div class="field"><label>IPC 密码</label><input type="password" value="testpass"></div>
+            <button class="ghost-btn wide" onclick="updateConn()">测试连接</button>
+
+            <div class="section-title">外观</div>
+            <div class="theme-row">
+              <span>深色模式</span>
+              <label class="switch"><input type="checkbox" checked onchange="toggleDark(this)"><span class="slider"></span></label>
+            </div>
+
+            <div class="section-title">通知</div>
+            <div class="theme-row">
+              <span>交易报价推送</span>
+              <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+            <div class="theme-row">
+              <span>好友请求推送</span>
+              <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+
+            <div class="section-title">关于</div>
+            <div class="about-card">
+              <p>ASF-Go Android 客户端</p>
+              <p class="dim">原型 v0.1 · 对接 asf-go v0.5.0</p>
+              <a href="https://github.com/cyqmq/asf-go" target="_blank">🔗 asf-go 仓库</a>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <nav class="bottom-nav">
+        <button class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')"><span>🏠</span><span>仪表盘</span></button>
+        <button class="nav-item" data-page="bots" onclick="switchPage('bots')"><span>🤖</span><span>机器人</span></button>
+        <button class="nav-item" data-page="commands" onclick="switchPage('commands')"><span>⌨️</span><span>命令</span></button>
+        <button class="nav-item" data-page="settings" onclick="switchPage('settings')"><span>⚙️</span><span>设置</span></button>
+      </nav>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

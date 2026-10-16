@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>下载 · ASF-Go Android 客户端原型</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: linear-gradient(135deg, #0a0c10, #1a2332);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 40px 20px; color: #e6edf3;
+    }
+    .container { max-width: 560px; width: 100%; }
+    h1 { font-size: 24px; margin-bottom: 4px; }
+    .sub { color: #8b949e; font-size: 13px; margin-bottom: 24px; }
+    .card {
+      background: #161b22; border: 1px solid #2a3342; border-radius: 16px;
+      padding: 20px; margin-bottom: 16px;
+    }
+    .card h2 { font-size: 15px; margin-bottom: 12px; }
+    .file-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid #2a3342; font-size: 14px;
+    }
+    .file-row:last-of-type { border-bottom: none; }
+    .file-name { font-family: monospace; color: #58a6ff; }
+    .file-size { color: #8b949e; font-size: 12px; margin-left: 8px; }
+    .file-left { display: flex; align-items: center; gap: 8px; }
+    a.dl {
+      background: #58a6ff; color: #0a0c10; text-decoration: none;
+      font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 8px;
+      transition: opacity 0.2s;
+    }
+    a.dl:hover { opacity: 0.85; }
+    a.dl.main {
+      display: block; text-align: center; padding: 14px; font-size: 15px;
+      border-radius: 12px; margin-bottom: 12px;
+    }
+    .back { display: inline-block; color: #58a6ff; text-decoration: none; font-size: 13px; margin-top: 16px; }
+    .hint { color: #8b949e; font-size: 12px; line-height: 1.7; margin-top: 10px; }
+    .hint code { background: #1c2330; padding: 2px 6px; border-radius: 4px; color: #58a6ff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📦 ASF-Go Android 客户端原型</h1>
+    <div class="sub">项目源码下载 · asf-apk 页面原型</div>
+
+    <div class="card">
+      <a class="dl main" href="asf-apk.zip" download>⬇️ 下载全部源码 (ZIP)</a>
+      <div class="file-row">
+        <div class="file-left"><span class="file-name">asf-apk.zip</span><span class="file-size">6.3 KB</span></div>
+        <a class="dl" href="asf-apk.zip" download>下载</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📄 项目文件清单</h2>
+      <div class="file-row">
+        <div class="file-left"><span class="file-name">index.html</span><span class="file-size">页面结构</span></div>
+        <a class="dl" href="index.html" download>下载</a>
+      </div>
+      <div class="file-row">
+        <div class="file-left"><span class="file-name">style.css</span><span class="file-size">样式</span></div>
+        <a class="dl" href="style.css" download>下载</a>
+      </div>
+      <div class="file-row">
+        <div class="file-left"><span class="file-name">app.js</span><span class="file-size">交互逻辑</span></div>
+        <a class="dl" href="app.js" download>下载</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🚀 本地运行</h2>
+      <div class="hint">
+        <code>cd asf-apk</code><br>
+        <code>python3 -m http.server 8081</code><br>
+        浏览器打开 <code>http://localhost:8081</code>
+      </div>
+    </div>
+
+    <a class="back" href="./">← 返回预览</a>
+  </div>
+</body>
+</html>

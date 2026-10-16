@@ -1,0 +1,8 @@
+{
+  "appId": "com.asfgo.android",
+  "appName": "ASF-Go",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http"
+  }
+}
