@@ -1,6 +1,5 @@
 package com.asfgo.android;
 
-import android.content.res.AssetManager;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -10,11 +9,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -23,12 +19,10 @@ import java.util.List;
 
 @CapacitorPlugin(name = "AsfGo")
 public class AsfGoPlugin extends Plugin {
-    private static final String BINARY_ASSET = "asf-go";
-
     private Process process;
 
     private File binaryFile() {
-        return new File(getContext().getFilesDir(), BINARY_ASSET);
+        return new File(getContext().getApplicationInfo().nativeLibraryDir, "libasfgo.so");
     }
 
     private File configDir() {
@@ -41,19 +35,11 @@ public class AsfGoPlugin extends Plugin {
 
     private void ensureBinary() throws IOException {
         File bin = binaryFile();
-        if (bin.exists() && bin.length() > 0) {
-            return;
+        if (!bin.exists() || bin.length() == 0) {
+            throw new IOException("内置 asf-go 二进制不存在: " + bin.getAbsolutePath());
         }
-        AssetManager am = getContext().getAssets();
-        try (InputStream in = am.open(BINARY_ASSET); OutputStream out = new FileOutputStream(bin)) {
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) {
-                out.write(buf, 0, n);
-            }
-        }
-        if (!bin.setExecutable(true)) {
-            throw new IOException("无法设置 asf-go 可执行权限");
+        if (!bin.canExecute()) {
+            throw new IOException("内置 asf-go 二进制不可执行: " + bin.getAbsolutePath());
         }
     }
 

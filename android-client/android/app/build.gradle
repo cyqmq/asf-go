@@ -3,6 +3,11 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.asfgo.android"
     compileSdk rootProject.ext.compileSdkVersion
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
     defaultConfig {
         applicationId "com.asfgo.android"
         minSdkVersion rootProject.ext.minSdkVersion

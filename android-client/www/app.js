@@ -159,8 +159,6 @@
     var pill = document.getElementById("status-pill");
     var pillDot = document.getElementById("pill-dot");
     var label = document.getElementById("status-label");
-    var hint = document.getElementById("hint-text");
-    var tip = document.getElementById("tip-text");
     var led = document.getElementById("status-led");
     var statusVal = document.getElementById("status-val");
     var modeRow = document.getElementById("mode-row");
@@ -173,8 +171,6 @@
       pill.className = "status-pill running";
       pillDot.className = "pill-dot glow";
       label.textContent = "运行中";
-      hint.textContent = "已连接 asf-go，可前往控制台发送 status / pause / resume 等命令管理挂卡。";
-      tip.textContent = "已连接 asf-go，可在 Web 管理界面查看 ASF-ui。";
       led.classList.add("running");
       statusVal.textContent = "running";
       statusVal.style.color = "#4caf50";
@@ -187,8 +183,6 @@
       pill.className = "status-pill";
       pillDot.className = "pill-dot";
       label.textContent = "空闲";
-      hint.textContent = "asf-go 是 ArchiSteamFarm 的 Go 语言实现，连接后可管理挂卡机器人、发送命令并查看日志。";
-      tip.textContent = "启动内置 asf-go 服务端，或连接远程服务器后管理机器人。";
       led.classList.remove("running");
       statusVal.textContent = "stopped";
       statusVal.style.color = "";

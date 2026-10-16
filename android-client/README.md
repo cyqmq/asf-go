@@ -30,8 +30,8 @@ cd android && ./gradlew assembleDebug
 
 ## 内置服务端 + IPC（已接入）
 
-- **内置 asf-go 服务端**：CI 构建时将 asf-go 交叉编译为 Android arm64 二进制（`GOOS=android CGO_ENABLED=0`）打包进 APK assets。
-  - Capacitor 原生插件 `AsfGoPlugin`：首次启动解压二进制到应用私有目录，写入默认 `ASF.json`（IPC 开启、密码可配），以 `--ipc-addr 127.0.0.1:1242` 启动子进程。
+- **内置 asf-go 服务端**：CI 构建时将 asf-go 交叉编译为 Android arm64 PIE 可执行文件（`GOOS=android CGO_ENABLED=0 -buildmode=pie`），作为 `jniLibs/arm64-v8a/libasfgo.so` 打包（`useLegacyPackaging true` 使其解压到可执行的 `nativeLibraryDir`）。
+  - Capacitor 原生插件 `AsfGoPlugin`：从 `nativeLibraryDir` 直接执行 `libasfgo.so`，写入默认 `ASF.json`（IPC 开启、密码可配），以 `--ipc-addr 127.0.0.1:1242` 启动子进程。
   - UI「启动 ASF 服务」按钮：调用插件启动内置服务 → 轮询 `GET /api/asf` 直到 IPC 就绪。
 - **远程服务器模式**：无原生插件（浏览器预览）或配置了远程地址时，连接外部 asf-go。
 - IPC 调用：
