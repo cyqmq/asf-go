@@ -28,12 +28,11 @@ cd android && ./gradlew assembleDebug
 # 产物：android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## 对接 asf-go IPC
+## 对接 asf-go IPC（待接入）
 
-- 应用内「设置」页可配置服务器地址、端口、IPC 密码。
-- `app.js` 通过 `GET /api/asf` 验证连接并刷新机器人列表；通过 `POST /api/command` 发送命令。
-- 请求携带 `Authentication: <IPC 密码>` 头（与 ASF-ui 相同认证方式）。
-- Android 允许 cleartext HTTP（`android:usesCleartextTraffic="true"`），`androidScheme` 设为 `http` 以访问局域网内 asf-go 服务。
+- 当前 `app.js` 为纯前端交互原型（服务启动/停止为模拟）。
+- 后续可接入：`GET /api/asf` 验证连接并刷新状态、`POST /api/command` 发送命令，请求携带 `Authentication: <IPC 密码>` 头（与 ASF-ui 相同认证方式）。
+- Android 已允许 cleartext HTTP（`android:usesCleartextTraffic="true"`），`androidScheme` 设为 `http` 以访问局域网内 asf-go 服务。
 - asf-go 默认 CORS 允许所有来源；如需限制请在 `GlobalConfig.IPCOrigins` 配置。
 
 ## CI 构建

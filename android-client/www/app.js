@@ -1,204 +1,212 @@
-// ASF-Go Android 客户端交互逻辑
-// 通过 asf-go IPC API 与服务器通信：GET /api/asf 状态、POST /api/command 命令
+(function () {
+  "use strict";
 
-function switchPage(name) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n => {
-    n.classList.toggle('active', n.dataset.page === name);
-  });
-}
+  var serviceRunning = false;
 
-function toggleBotDetail(name) {
-  const el = document.getElementById('detail-' + name);
-  el.classList.toggle('hidden');
-}
-
-// ---- 服务器连接 ----
-function getBase() {
-  const host = document.getElementById('server-addr').value || '127.0.0.1';
-  const port = document.getElementById('server-port').value || '1242';
-  return 'http://' + host + ':' + port;
-}
-
-function getPass() {
-  const el = document.querySelector('#page-settings input[type=password]');
-  return el ? el.value : '';
-}
-
-function setConn(online, label) {
-  const pill = document.getElementById('conn-pill');
-  const labelEl = document.getElementById('conn-label');
-  if (online) {
-    pill.classList.remove('offline');
-    labelEl.textContent = label || '已连接';
-  } else {
-    pill.classList.add('offline');
-    labelEl.textContent = label || '离线';
-  }
-}
-
-async function updateConn() {
-  const host = document.getElementById('server-addr').value || '127.0.0.1';
-  const port = document.getElementById('server-port').value || '1242';
-  const base = getBase();
-  const pass = getPass();
-  try {
-    const resp = await fetch(base + '/api/asf', {
-      headers: { 'Authentication': pass }
+  /* ─── 页面切换 ─── */
+  window.switchPage = function (page) {
+    document.querySelectorAll(".page").forEach(function (el) { el.classList.remove("active"); });
+    document.getElementById("page-" + page).classList.add("active");
+    document.querySelectorAll(".nav-btn").forEach(function (el) {
+      el.classList.toggle("active", el.getAttribute("data-page") === page);
     });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
-    const ver = data.Result && data.Result.Version ? data.Result.Version : '?';
-    setConn(true, '已连接 v' + ver);
-    appendCmd('> 连接 ' + host + ':' + port + ' … 握手成功 (v' + ver + ')', 'ok');
-    refreshBots();
-    return true;
-  } catch (e) {
-    setConn(false, '离线');
-    appendCmd('> 连接 ' + host + ':' + port + ' … 失败: ' + e.message, 'err');
-    return false;
-  }
-}
+  };
 
-// ---- 命令执行 ----
-async function runCommand(cmd) {
-  const base = getBase();
-  const pass = getPass();
-  try {
-    const resp = await fetch(base + '/api/command', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authentication': pass },
-      body: JSON.stringify({ command: cmd })
+  /* ─── 主题切换 ─── */
+  window.setTheme = function (theme) {
+    document.body.setAttribute("data-theme", theme);
+    document.querySelectorAll(".theme-pill").forEach(function (el) {
+      el.classList.toggle("active", el.getAttribute("data-theme") === theme);
     });
-    const data = await resp.json();
-    const msg = data.Message || data.Result || (data.Success ? 'OK' : '命令失败');
-    appendCmd(String(msg), data.Success ? 'ok' : 'err');
-  } catch (e) {
-    appendCmd('请求失败: ' + e.message, 'err');
+  };
+
+  /* ─── 服务启动/停止 ─── */
+  window.toggleService = function () {
+    serviceRunning = !serviceRunning;
+    var btn = document.getElementById("launch-btn");
+    var icon = document.getElementById("launch-icon");
+    var text = document.getElementById("launch-text");
+    var pill = document.getElementById("status-pill");
+    var pillDot = document.getElementById("pill-dot");
+    var label = document.getElementById("status-label");
+    var hint = document.getElementById("hint-text");
+    var tip = document.getElementById("tip-text");
+    var led = document.getElementById("status-led");
+    var statusVal = document.getElementById("status-val");
+    var modeRow = document.getElementById("mode-row");
+    var modeText = document.getElementById("mode-text");
+
+    if (serviceRunning) {
+      btn.classList.add("running");
+      icon.innerHTML = '<use href="#i-stop-fill"/>';
+      text.textContent = "停止服务";
+      pill.className = "status-pill running";
+      pillDot.className = "pill-dot glow";
+      label.textContent = "运行中";
+      hint.textContent = "已连接 asf-go，可前往控制台发送 status / pause / resume 等命令管理挂卡。";
+      tip.textContent = "已连接 asf-go，2 个机器人在线，1 个挂机中。可在 Web 管理界面查看 ASF-ui。";
+      led.classList.add("running");
+      statusVal.textContent = "running";
+      statusVal.style.color = "#4caf50";
+      modeRow.innerHTML = '<svg class="icon-16"><use href="#i-globe"/></svg>';
+      modeText.textContent = "公开模式";
+      setVal("bots-val", "2 / 3");
+      setVal("farming-val", "1");
+      setVal("info-bots", "2");
+      setVal("info-farming", "1");
+      setVal("info-cards", "5");
+      setVal("info-trades", "1");
+      addLog("INFO", "已连接 asf-go v0.5.0 (127.0.0.1:1242)");
+      addLog("INFO", "testbot 开始挂机 Team Fortress 2 (440)");
+      addLog("WARN", "oldbot 离线：未配置 Steam 凭据");
+      addConsoleMsg("bot", "已连接 asf-go v0.5.0。当前 2 个机器人在线，1 个挂机中。");
+    } else {
+      btn.classList.remove("running");
+      icon.innerHTML = '<use href="#i-play-fill"/>';
+      text.textContent = "启动 ASF 服务";
+      pill.className = "status-pill";
+      pillDot.className = "pill-dot";
+      label.textContent = "空闲";
+      hint.textContent = "asf-go 是 ArchiSteamFarm 的 Go 语言实现，连接后可管理挂卡机器人、发送命令并查看日志。";
+      tip.textContent = "asf-go 是 ArchiSteamFarm 的 Go 语言实现，连接后可查看机器人状态、发送命令、查看日志。";
+      led.classList.remove("running");
+      statusVal.textContent = "stopped";
+      statusVal.style.color = "";
+      modeRow.innerHTML = '<svg class="icon-16"><use href="#i-lock"/></svg>';
+      modeText.textContent = "本地模式";
+      setVal("bots-val", "0 / 0");
+      setVal("farming-val", "0");
+      setVal("info-bots", "0");
+      setVal("info-farming", "0");
+      setVal("info-cards", "0");
+      setVal("info-trades", "0");
+      addLog("INFO", "已断开与 asf-go 的连接");
+      addConsoleMsg("bot", "已断开连接。点击仪表盘「启动 ASF 服务」重新连接。");
+    }
+  };
+
+  function setVal(id, v) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = v;
   }
-}
 
-function sendCommand() {
-  const input = document.getElementById('cmd-input');
-  const v = input.value.trim();
-  if (!v) return;
-  appendCmd('!' + v);
-  input.value = '';
-  runCommand(v);
-}
+  /* ─── 端点点击 ─── */
+  window.openEndpoint = function () {
+    toastMsg("已在浏览器打开端点地址");
+  };
 
-function sendQuick(cmd) {
-  appendCmd('!' + cmd);
-  runCommand(cmd);
-}
+  /* ─── 机器人管理 ─── */
+  window.refreshBots = function () {
+    toastMsg("已刷新机器人列表");
+    addLog("INFO", "已刷新机器人列表");
+  };
 
-// ---- 快捷操作 ----
-function quickAction(action) {
-  switch (action) {
-    case 'start':
-      appendCmd('> 正在检查全部机器人…', 'ok');
-      runCommand('status');
-      break;
-    case 'pause':
-      appendCmd('> 正在暂停全部机器人…', 'ok');
-      runCommand('pause');
-      break;
-    case 'resume':
-      appendCmd('> 正在恢复全部机器人…', 'ok');
-      runCommand('resume');
-      break;
-    case 'redeem':
-      appendCmd('🎁 请在上方命令栏输入兑换码：!redeem <code>', 'ok');
-      break;
+  window.botAction = function (name, action) {
+    toastMsg("已发送：" + name + " " + action);
+    addLog("INFO", name + " " + action + " 已执行");
+  };
+
+  window.toggleBotDetail = function (name) {
+    var el = document.getElementById("detail-" + name);
+    if (el) el.classList.toggle("hidden");
+  };
+
+  /* ─── 命令控制台 ─── */
+  window.sendCommand = function () {
+    var input = document.getElementById("console-input");
+    var text = input.value.trim();
+    if (!text) return;
+    addConsoleMsg("user", "!" + text);
+    setTimeout(function () {
+      addConsoleMsg("bot", buildReply(text));
+    }, 400);
+    input.value = "";
+  };
+
+  function buildReply(cmd) {
+    var c = cmd.toLowerCase();
+    if (c.indexOf("status") >= 0) {
+      return "testbot  | 挂机中 | TF2 (440) | 剩余 5 卡\ntestbot2 | 在线 | 空闲\noldbot   | 离线 | 上次在线 3 天前";
+    }
+    if (c.indexOf("stats") >= 0) {
+      return "全局: 在线 2 / 总数 3 · 挂机中 1 · 今日掉卡 3 张";
+    }
+    if (c.indexOf("version") >= 0) {
+      return "ASF-Go v0.5.0 (Go 语言实现)";
+    }
+    if (c.indexOf("pause") >= 0) {
+      return "已暂停: testbot";
+    }
+    if (c.indexOf("resume") >= 0) {
+      return "已恢复: testbot";
+    }
+    if (c.indexOf("help") >= 0) {
+      return "可用: status / stats / pause <bot> / resume <bot> / redeem / version / help";
+    }
+    return "未知命令: " + cmd + "（输入 help 查看帮助）";
   }
-  switchPage('commands');
-}
 
-async function botAction(bot, action) {
-  if (action === 'start' || action === 'pause' || action === 'resume') {
-    appendCmd('> ' + bot + ' ' + action + ' …', 'ok');
-    await runCommand(action + ' ' + bot);
-  } else {
-    appendCmd('> ' + bot + ' ' + action + ' … 已发送', 'ok');
+  function addConsoleMsg(role, text) {
+    var body = document.getElementById("console-body");
+    var div = document.createElement("div");
+    div.className = "msg " + role;
+    if (role === "bot") {
+      div.innerHTML = '<div class="avatar"><svg class="icon-16"><use href="#i-server"/></svg></div><div class="bubble mono"></div>';
+    } else {
+      div.innerHTML = '<div class="bubble"></div>';
+    }
+    var bubble = div.querySelector(".bubble");
+    bubble.textContent = text;
+    body.appendChild(div);
+    body.scrollTop = body.scrollHeight;
   }
-}
 
-function addBot() {
-  const list = document.getElementById('bot-list');
-  const n = document.querySelectorAll('.bot-card').length + 1;
-  const div = document.createElement('div');
-  div.className = 'bot-card';
-  div.innerHTML = `
-    <div class="bot-avatar">B${n}</div>
-    <div class="bot-info"><div class="bot-name">newbot${n}</div><div class="bot-sub">在线 · 空闲</div></div>
-    <div class="bot-status online">在线</div>`;
-  list.appendChild(div);
-  document.getElementById('bot-count').textContent = n;
-}
-
-// ---- 机器人列表刷新（从 /api/asf 读取真实数据）----
-async function refreshBots() {
-  const base = getBase();
-  const pass = getPass();
-  try {
-    const resp = await fetch(base + '/api/asf', {
-      headers: { 'Authentication': pass }
-    });
-    if (!resp.ok) return;
-    const data = await resp.json();
-    const bots = data.Result && data.Result.Bots ? data.Result.Bots : null;
-    const countEl = document.getElementById('bot-count');
-    const listEl = document.getElementById('bot-list');
-    if (!bots || typeof bots !== 'object') return;
-    const names = Object.keys(bots);
-    if (countEl) countEl.textContent = names.length;
-    // 更新已存在的卡片状态
-    names.forEach(name => {
-      const info = bots[name];
-      const statusEl = document.getElementById('bot-status-' + name);
-      const subEl = document.getElementById('bot-sub-' + name);
-      if (!statusEl) return;
-      const connected = info.IsConnectedAndLoggedOn;
-      const farming = info.CardsFarmer && info.CardsFarmer.NowFarming;
-      if (farming) {
-        statusEl.textContent = '挂机中';
-        statusEl.className = 'bot-status farming';
-      } else if (connected) {
-        statusEl.textContent = '在线';
-        statusEl.className = 'bot-status online';
-      } else {
-        statusEl.textContent = '离线';
-        statusEl.className = 'bot-status offline';
-      }
-      if (subEl) {
-        subEl.textContent = farming ? '挂机中 · 正在掉落卡牌' : (connected ? '在线 · 空闲' : '未连接');
-      }
-    });
-  } catch (e) {
-    // 忽略：连接失败时不打扰用户
+  /* ─── 日志 ─── */
+  function addLog(level, msg) {
+    var container = document.getElementById("log-container");
+    if (!container) return;
+    var now = new Date();
+    var time = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+    var line = document.createElement("div");
+    line.className = "log-line " + level.toLowerCase();
+    line.innerHTML = '<span class="log-time">' + time + '</span><span class="log-lvl ' + level + '">' + level + '</span><span></span>';
+    line.lastElementChild.textContent = msg;
+    container.appendChild(line);
+    container.scrollTop = container.scrollHeight;
   }
-}
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
 
-// ---- 命令输出 ----
-function appendCmd(text, type) {
-  const out = document.getElementById('cmd-output');
-  const parts = String(text).split('\n');
-  const div = document.createElement('div');
-  div.className = 'cmd-line ' + (type || '');
-  div.textContent = '> ' + parts[0];
-  out.appendChild(div);
-  for (let i = 1; i < parts.length; i++) {
-    const r = document.createElement('div');
-    r.className = 'cmd-result';
-    r.textContent = parts[i];
-    out.appendChild(r);
-  }
-  out.scrollTop = out.scrollHeight;
-}
+  window.downloadLog = function () {
+    var lines = document.querySelectorAll(".log-line");
+    var text = Array.from(lines).map(function (l) { return l.textContent; }).join("\n");
+    var blob = new Blob([text], { type: "text/plain" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "asf-go.log";
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  };
 
-function toggleDark(el) {
-  document.body.style.background = el.checked
-    ? 'linear-gradient(135deg, #0a0c10, #1a2332)'
-    : 'linear-gradient(135deg, #e8edf3, #cfd8e6)';
-}
+  window.logToggle = function (el, name) {
+    addLog(el.checked ? "INFO" : "WARN", (el.checked ? "已开启 " : "已关闭 ") + name);
+  };
+
+  /* ─── 关于弹窗 ─── */
+  window.showAbout = function () {
+    document.getElementById("about-modal").classList.remove("hidden");
+  };
+  window.hideAbout = function () {
+    document.getElementById("about-modal").classList.add("hidden");
+  };
+
+  /* ─── Toast ─── */
+  var toastTimer = null;
+  window.toastMsg = function (msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove("show"); }, 1800);
+  };
+})();

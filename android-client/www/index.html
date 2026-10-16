@@ -3,187 +3,429 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ASF-Go · Android 客户端原型</title>
+  <title>ASF-Go · Android UI</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-theme="carbon">
+
+  <!-- SVG 图标库 -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <defs>
+      <symbol id="i-play-fill" viewBox="0 0 24 24">
+        <path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20zm-2-13.5v7l6-3.5-6-3.5z" fill="currentColor"/>
+      </symbol>
+      <symbol id="i-stop-fill" viewBox="0 0 24 24">
+        <path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20zm-3-12v4a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1z" fill="currentColor"/>
+      </symbol>
+      <symbol id="i-pause-fill" viewBox="0 0 24 24">
+        <rect x="6" y="4" width="4" height="16" rx="1.5" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1.5" fill="currentColor"/>
+      </symbol>
+      <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </symbol>
+      <symbol id="i-lightbulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/>
+      </symbol>
+      <symbol id="i-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+      </symbol>
+      <symbol id="i-console" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+      </symbol>
+      <symbol id="i-article" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+      </symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </symbol>
+      <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22a10 10 0 1 1 10-10c0 1.7-1.3 3-3 3h-2a2 2 0 0 0-2 2c0 .5.2 1 .5 1.3.3.4.5.8.5 1.2a1.5 1.5 0 0 1-1.5 1.5z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+      </symbol>
+      <symbol id="i-github" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </symbol>
+      <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </symbol>
+      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+      </symbol>
+      <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+      </symbol>
+      <symbol id="i-gamepad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9h12a3 3 0 0 1 3 3v4a2 2 0 0 1-2 2 2 2 0 0 1-1.7-.9L16 15H8l-1.3 2.1A2 2 0 0 1 5 18a2 2 0 0 1-2-2v-4a3 3 0 0 1 3-3z"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/>
+      </symbol>
+      <symbol id="i-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+      </symbol>
+      <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+      </symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </symbol>
+    </defs>
+  </svg>
 
   <div class="page-header">
-    <h1>ASF-Go <span>Android 客户端原型</span></h1>
-    <p>基于 asf-go v0.5.0 IPC API 设计 · 可交互演示</p>
+    <h1>ASF-Go <span>Android UI</span></h1>
+    <p>仪表盘融合两版特点 · 机器人管理功能页 · 纯矢量图标</p>
   </div>
 
   <div class="stage">
     <div class="phone">
       <div class="status-bar">
         <span>09:41</span>
-        <span class="status-icons">📶 🔋</span>
+        <span class="status-icons">
+          <span class="signal"><i></i><i></i><i></i><i></i></span>
+          <span class="battery"><span class="battery-fill"></span></span>
+        </span>
       </div>
 
       <div class="screen">
-        <!-- 仪表盘 -->
-        <section class="page active" id="page-dashboard">
-          <div class="appbar">
-            <div class="appbar-title">
-              <span class="logo">⚙️</span> ASF-Go
+
+        <!-- ═══ 仪表盘（融合两版特点） ═══ -->
+        <section class="page active" id="page-status">
+          <div class="scroll-view">
+            <div class="floating-appbar">
+              <h1 class="app-title" id="app-title">ASF-GO</h1>
+              <div class="status-pill" id="status-pill">
+                <span class="pill-dot" id="pill-dot"></span>
+                <span id="status-label">空闲</span>
+              </div>
             </div>
-            <div class="conn-pill" id="conn-pill">
-              <span class="pill-dot"></span><span id="conn-label">已连接</span>
-            </div>
-          </div>
-          <div class="content">
-            <div class="hero-card">
-              <div class="hero-row">
-                <div>
-                  <div class="hero-version">v0.5.0</div>
-                  <div class="hero-sub">asf-go · Go 版挂卡</div>
+
+            <div class="page-body">
+              <!-- 启动大按钮 -->
+              <button class="launch-card" id="launch-btn" onclick="toggleService()">
+                <svg class="launch-icon" id="launch-icon"><use href="#i-play-fill"/></svg>
+                <span class="launch-text" id="launch-text">启动 ASF 服务</span>
+              </button>
+
+              <!-- 毛玻璃状态卡 -->
+              <div class="glass-card">
+                <div class="glass-info">
+                  <div class="endpoint-row">
+                    <span class="icon-tile"><svg class="icon-18"><use href="#i-link"/></svg></span>
+                    <span class="endpoint-label">ENDPOINT</span>
+                  </div>
+                  <div class="mode-row" id="mode-row">
+                    <svg class="icon-16"><use href="#i-lock"/></svg>
+                    <span id="mode-text">本地模式</span>
+                  </div>
+                  <button class="url-text" id="endpoint-url" onclick="openEndpoint()">http://127.0.0.1:1242</button>
+                  <div class="web-admin-label">Web 管理界面</div>
                 </div>
-                <div class="hero-badge">✓ 运行中</div>
               </div>
-              <div class="hero-stats">
-                <div class="stat"><span class="stat-num" id="stat-bots">2</span><span>机器人</span></div>
-                <div class="stat"><span class="stat-num" id="stat-farming">1</span><span>挂机中</span></div>
-                <div class="stat"><span class="stat-num" id="stat-memory">48</span><span>MB</span></div>
-              </div>
-            </div>
 
-            <div class="quick-grid">
-              <button class="quick-btn" onclick="quickAction('start')">▶ 全部启动</button>
-              <button class="quick-btn" onclick="quickAction('pause')">⏸ 全部暂停</button>
-              <button class="quick-btn" onclick="quickAction('resume')">▶ 全部恢复</button>
-              <button class="quick-btn" onclick="quickAction('redeem')">🎁 兑换</button>
-            </div>
-
-            <div class="card">
-              <div class="card-title">📊 实时状态</div>
-              <div class="status-row"><span>IPC 服务</span><span class="ok">● 正常</span></div>
-              <div class="status-row"><span>GitHub 更新</span><span class="ok">● 已是最新</span></div>
-              <div class="status-row"><span>卡牌掉落</span><span class="ok">● 进行中</span></div>
-              <div class="status-row"><span>网络延迟</span><span class="mono">23ms</span></div>
-            </div>
-          </div>
-        </section>
-
-        <!-- 机器人列表 -->
-        <section class="page" id="page-bots">
-          <div class="appbar">
-            <div class="appbar-title">🤖 机器人 <span class="badge" id="bot-count">2</span></div>
-            <button class="mini-btn" onclick="addBot()">＋</button>
-          </div>
-          <div class="content" id="bot-list">
-            <div class="bot-card" onclick="toggleBotDetail('testbot')">
-              <div class="bot-avatar">T</div>
-              <div class="bot-info">
-                <div class="bot-name">testbot</div>
-                <div class="bot-sub" id="bot-sub-testbot">挂机中 · 剩余 5 张卡</div>
+              <!-- 服务状态行卡（上一版特点） -->
+              <div class="status-card">
+                <div class="status-row">
+                  <span class="status-led" id="status-led"></span>
+                  <span>IPC 服务状态</span>
+                  <span class="status-val" id="status-val">stopped</span>
+                </div>
+                <div class="status-row">
+                  <span>端口</span>
+                  <span class="mono" id="port-val">1242</span>
+                </div>
+                <div class="status-row">
+                  <span>在线机器人</span>
+                  <span id="bots-val">0 / 0</span>
+                </div>
+                <div class="status-row">
+                  <span>挂机中</span>
+                  <span id="farming-val">0</span>
+                </div>
               </div>
-              <div class="bot-status farming" id="bot-status-testbot">挂机中</div>
-            </div>
-            <div class="bot-detail hidden" id="detail-testbot">
-              <div class="detail-row"><span>SteamID</span><span class="mono">7656119…</span></div>
-              <div class="detail-row"><span>当前游戏</span><span>Team Fortress 2</span></div>
-              <div class="detail-row"><span>挂机进度</span><span class="progress"><i style="width:70%"></i></span></div>
-              <div class="detail-actions">
-                <button onclick="botAction('testbot','start')">▶</button>
-                <button onclick="botAction('testbot','pause')">⏸</button>
-                <button onclick="botAction('testbot','resume')">↻</button>
-                <button onclick="botAction('testbot','redeem')">🎁</button>
-              </div>
-            </div>
 
-            <div class="bot-card" onclick="toggleBotDetail('testbot2')">
-              <div class="bot-avatar">T2</div>
-              <div class="bot-info">
-                <div class="bot-name">testbot2</div>
-                <div class="bot-sub" id="bot-sub-testbot2">在线 · 空闲</div>
+              <!-- 信息宫格（上一版特点） -->
+              <div class="info-grid">
+                <div class="info-card">
+                  <span class="info-icon"><svg class="icon-20"><use href="#i-server"/></svg></span>
+                  <span>在线机器人</span>
+                  <span class="info-val" id="info-bots">0</span>
+                </div>
+                <div class="info-card">
+                  <span class="info-icon"><svg class="icon-20"><use href="#i-gamepad"/></svg></span>
+                  <span>挂机中</span>
+                  <span class="info-val" id="info-farming">0</span>
+                </div>
+                <div class="info-card">
+                  <span class="info-icon"><svg class="icon-20"><use href="#i-card"/></svg></span>
+                  <span>剩余卡牌</span>
+                  <span class="info-val" id="info-cards">0</span>
+                </div>
+                <div class="info-card">
+                  <span class="info-icon"><svg class="icon-20"><use href="#i-box"/></svg></span>
+                  <span>待处理交易</span>
+                  <span class="info-val" id="info-trades">0</span>
+                </div>
               </div>
-              <div class="bot-status online" id="bot-status-testbot2">在线</div>
-            </div>
-            <div class="bot-detail hidden" id="detail-testbot2">
-              <div class="detail-row"><span>SteamID</span><span class="mono">7656119…</span></div>
-              <div class="detail-row"><span>当前游戏</span><span>无</span></div>
-              <div class="detail-row"><span>挂机进度</span><span class="progress"><i style="width:0%"></i></span></div>
-              <div class="detail-actions">
-                <button onclick="botAction('testbot2','start')">▶</button>
-                <button onclick="botAction('testbot2','pause')">⏸</button>
-                <button onclick="botAction('testbot2','resume')">↻</button>
-                <button onclick="botAction('testbot2','redeem')">🎁</button>
+
+              <!-- 提示卡（上一版特点） -->
+              <div class="tip-card">
+                <span class="tip-icon"><svg class="icon-20"><use href="#i-lightbulb"/></svg></span>
+                <div>
+                  <strong>提示</strong>
+                  <p id="tip-text">asf-go 是 ArchiSteamFarm 的 Go 语言实现，连接后可查看机器人状态、发送命令、查看日志。</p>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- 命令 -->
-        <section class="page" id="page-commands">
-          <div class="appbar">
-            <div class="appbar-title">⌨️ 命令控制台</div>
-          </div>
-          <div class="cmd-output" id="cmd-output">
-            <div class="cmd-line ok">> 连接 asf-go v0.5.0</div>
-            <div class="cmd-line ok">> IPC 握手成功 (auth=ipc)</div>
-            <div class="cmd-line">!status</div>
-            <div class="cmd-result">testbot | 挂机中 | TF2(440):5 | 在线状态: Online<br>testbot2 | 在线 | 当前无挂机游戏</div>
-          </div>
-          <div class="cmd-input">
-            <span class="prefix">!</span>
-            <input type="text" placeholder="输入命令…" id="cmd-input">
-            <button onclick="sendCommand()">发送</button>
-          </div>
-          <div class="quick-cmds">
-            <button onclick="sendQuick('status')">status</button>
-            <button onclick="sendQuick('pause')">pause</button>
-            <button onclick="sendQuick('resume')">resume</button>
-            <button onclick="sendQuick('stats')">stats</button>
-            <button onclick="sendQuick('version')">version</button>
+        <!-- ═══ 控制台 ═══ -->
+        <section class="page" id="page-console">
+          <div class="page-shell">
+            <div class="solid-appbar">
+              <h1 class="app-title sm">命令控制台</h1>
+            </div>
+            <div class="console-body" id="console-body">
+              <div class="msg bot">
+                <div class="avatar"><svg class="icon-16"><use href="#i-server"/></svg></div>
+                <div class="bubble mono">已连接 asf-go v0.5.0。输入 <b>status</b>、<b>pause</b>、<b>resume</b> 等命令。</div>
+              </div>
+            </div>
+            <div class="console-input">
+              <span class="input-prefix">!</span>
+              <input type="text" id="console-input" placeholder="输入命令…" onkeydown="if(event.key==='Enter')sendCommand()">
+              <button class="send-btn" onclick="sendCommand()"><svg class="icon-18"><use href="#i-send"/></svg></button>
+            </div>
           </div>
         </section>
 
-        <!-- 设置 -->
+        <!-- ═══ 日志 ═══ -->
+        <section class="page" id="page-logs">
+          <div class="page-shell">
+            <div class="solid-appbar">
+              <h1 class="app-title sm">日志</h1>
+              <button class="icon-btn" onclick="downloadLog()" title="导出日志">
+                <svg class="icon-18"><use href="#i-download"/></svg>
+              </button>
+            </div>
+            <div class="log-container" id="log-container">
+              <div class="log-line info"><span class="log-time">03:05:11</span><span class="log-lvl INFO">INFO</span><span>ASF-Go v0.5.0 已启动</span></div>
+              <div class="log-line info"><span class="log-time">03:05:12</span><span class="log-lvl INFO">INFO</span><span>IPC 服务监听于 0.0.0.0:1242</span></div>
+              <div class="log-line warn"><span class="log-time">03:05:12</span><span class="log-lvl WARN">WARN</span><span>oldbot 未配置 Steam 凭据，保持离线</span></div>
+              <div class="log-line info"><span class="log-time">03:05:13</span><span class="log-lvl INFO">INFO</span><span>Web 管理界面已就绪</span></div>
+              <div class="log-line error"><span class="log-time">03:05:14</span><span class="log-lvl ERROR">ERROR</span><span>GitHub 更新检查失败（限流）</span></div>
+              <div class="log-line info"><span class="log-time">03:05:15</span><span class="log-lvl INFO">INFO</span><span>等待用户操作…</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ 机器人管理 ═══ -->
+        <section class="page" id="page-web">
+          <div class="page-shell">
+            <div class="solid-appbar">
+              <h1 class="app-title sm">机器人管理</h1>
+              <button class="icon-btn" onclick="refreshBots()" title="刷新">
+                <svg class="icon-18"><use href="#i-refresh"/></svg>
+              </button>
+            </div>
+            <div class="bots-body">
+              <div class="bots-summary">
+                <span class="summary-chip">在线 <b id="sum-online">2</b></span>
+                <span class="summary-chip">挂机中 <b id="sum-farming">1</b></span>
+                <span class="summary-chip">离线 <b id="sum-offline">1</b></span>
+              </div>
+
+              <div class="bot-row" data-status="farming" onclick="toggleBotDetail('testbot')">
+                <div class="bot-avatar" style="background:linear-gradient(135deg,#2b6cb0,#66c0f4)">T</div>
+                <div class="bot-main">
+                  <div class="bot-name">testbot <span class="bot-status farming">挂机中</span></div>
+                  <div class="bot-sub">TF2 (440) · 剩余 5 卡</div>
+                </div>
+                <div class="bot-actions" onclick="event.stopPropagation()">
+                  <button class="bot-act" onclick="botAction('testbot','暂停')" title="暂停"><svg class="icon-14"><use href="#i-pause-fill"/></svg></button>
+                  <button class="bot-act primary" onclick="botAction('testbot','恢复')" title="恢复"><svg class="icon-14"><use href="#i-play-fill"/></svg></button>
+                </div>
+              </div>
+              <div class="bot-detail hidden" id="detail-testbot">
+                <div class="detail-row"><span>SteamID</span><span class="mono">7656119XXXXXXXXXX</span></div>
+                <div class="detail-row"><span>钱包余额</span><span>¥2.35</span></div>
+                <div class="detail-row"><span>挂机进度</span><span class="progress"><i style="width:50%"></i></span></div>
+                <div class="detail-actions">
+                  <button onclick="botAction('testbot','暂停')">暂停</button>
+                  <button onclick="botAction('testbot','恢复')">恢复</button>
+                  <button onclick="botAction('testbot','停止')">停止</button>
+                  <button onclick="toastMsg('已请求 2FA 确认')">2FA</button>
+                </div>
+              </div>
+
+              <div class="bot-row" data-status="online" onclick="toggleBotDetail('testbot2')">
+                <div class="bot-avatar" style="background:linear-gradient(135deg,#1f6f43,#3fb950)">T2</div>
+                <div class="bot-main">
+                  <div class="bot-name">testbot2 <span class="bot-status online">在线</span></div>
+                  <div class="bot-sub">空闲 · 无挂机游戏</div>
+                </div>
+                <div class="bot-actions" onclick="event.stopPropagation()">
+                  <button class="bot-act primary" onclick="botAction('testbot2','启动')" title="启动"><svg class="icon-14"><use href="#i-play-fill"/></svg></button>
+                  <button class="bot-act" onclick="botAction('testbot2','暂停')" title="暂停"><svg class="icon-14"><use href="#i-pause-fill"/></svg></button>
+                </div>
+              </div>
+              <div class="bot-detail hidden" id="detail-testbot2">
+                <div class="detail-row"><span>SteamID</span><span class="mono">7656119XXXXXXXXXX</span></div>
+                <div class="detail-row"><span>钱包余额</span><span>¥0.00</span></div>
+                <div class="detail-row"><span>挂机进度</span><span class="progress"><i style="width:0%"></i></span></div>
+                <div class="detail-actions">
+                  <button onclick="botAction('testbot2','启动')">启动</button>
+                  <button onclick="botAction('testbot2','暂停')">暂停</button>
+                  <button onclick="toastMsg('已发送 2FA 确认')">2FA</button>
+                </div>
+              </div>
+
+              <div class="bot-row" data-status="offline" onclick="toggleBotDetail('oldbot')">
+                <div class="bot-avatar" style="background:linear-gradient(135deg,#6e7681,#8b949e)">O</div>
+                <div class="bot-main">
+                  <div class="bot-name">oldbot <span class="bot-status offline">离线</span></div>
+                  <div class="bot-sub">上次在线 3 天前</div>
+                </div>
+                <div class="bot-actions" onclick="event.stopPropagation()">
+                  <button class="bot-act primary" onclick="botAction('oldbot','启动')" title="启动"><svg class="icon-14"><use href="#i-play-fill"/></svg></button>
+                </div>
+              </div>
+              <div class="bot-detail hidden" id="detail-oldbot">
+                <div class="detail-row"><span>SteamID</span><span class="mono">7656119XXXXXXXXXX</span></div>
+                <div class="detail-row"><span>状态</span><span>离线 · 需重新登录</span></div>
+                <div class="detail-actions">
+                  <button onclick="botAction('oldbot','启动')">启动</button>
+                  <button onclick="toastMsg('已请求 QR 登录')">QR 登录</button>
+                </div>
+              </div>
+
+              <button class="btn-secondary filled add-bot" onclick="toastMsg('新建机器人需在服务器端创建配置文件')">添加机器人</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ 设置 ═══ -->
         <section class="page" id="page-settings">
-          <div class="appbar">
-            <div class="appbar-title">⚙️ 设置</div>
-          </div>
-          <div class="content">
-            <div class="section-title">服务器连接</div>
-            <div class="field"><label>服务器地址</label><input type="text" value="127.0.0.1" id="server-addr"></div>
-            <div class="field"><label>端口</label><input type="text" value="1242" id="server-port" oninput="updateConn()"></div>
-            <div class="field"><label>IPC 密码</label><input type="password" value="testpass"></div>
-            <button class="ghost-btn wide" onclick="updateConn()">测试连接</button>
-
-            <div class="section-title">外观</div>
-            <div class="theme-row">
-              <span>深色模式</span>
-              <label class="switch"><input type="checkbox" checked onchange="toggleDark(this)"><span class="slider"></span></label>
+          <div class="page-shell scroll">
+            <div class="config-top">
+              <h1 class="app-title">设置</h1>
+              <div class="top-actions">
+                <button class="about-btn" onclick="showAbout()">
+                  <svg class="icon-18"><use href="#i-info"/></svg> 关于
+                </button>
+                <button class="icon-btn" onclick="window.open('https://github.com/cyqmq/asf-go','_blank')" title="GitHub">
+                  <svg class="icon-18"><use href="#i-github"/></svg>
+                </button>
+              </div>
             </div>
 
-            <div class="section-title">通知</div>
-            <div class="theme-row">
-              <span>交易报价推送</span>
-              <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
-            </div>
-            <div class="theme-row">
-              <span>好友请求推送</span>
-              <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+            <div class="section-label">主题</div>
+            <div class="theme-wrap" id="theme-wrap">
+              <button class="theme-pill active" data-theme="carbon" onclick="setTheme('carbon')"><svg class="icon-18"><use href="#i-palette"/></svg>CARBON</button>
+              <button class="theme-pill" data-theme="slate" onclick="setTheme('slate')"><svg class="icon-18"><use href="#i-palette"/></svg>SLATE</button>
+              <button class="theme-pill" data-theme="obsidian" onclick="setTheme('obsidian')"><svg class="icon-18"><use href="#i-palette"/></svg>OBSIDIAN</button>
+              <button class="theme-pill" data-theme="ebony" onclick="setTheme('ebony')"><svg class="icon-18"><use href="#i-palette"/></svg>EBONY</button>
+              <button class="theme-pill" data-theme="nord" onclick="setTheme('nord')"><svg class="icon-18"><use href="#i-palette"/></svg>NORD</button>
+              <button class="theme-pill" data-theme="sakura" onclick="setTheme('sakura')"><svg class="icon-18"><use href="#i-palette"/></svg>SAKURA</button>
             </div>
 
-            <div class="section-title">关于</div>
+            <div class="section-label">服务器配置</div>
+            <div class="field">
+              <label>地址</label>
+              <input type="text" value="127.0.0.1">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>端口</label>
+                <input type="text" value="1242">
+              </div>
+              <div class="field">
+                <label>IPC 密码</label>
+                <input type="password" value="testpass">
+              </div>
+            </div>
+            <div class="field">
+              <label>asf-go 路径</label>
+              <input type="text" value="~/asf-go/asf-go">
+            </div>
+            <div class="field">
+              <label>启动参数</label>
+              <input type="text" value="--ipc-addr 127.0.0.1:1242">
+            </div>
+            <div class="btn-row">
+              <button class="btn-secondary" onclick="toastMsg('二进制校验通过')">检查二进制</button>
+              <button class="btn-secondary filled" onclick="toastMsg('配置已保存')">保存</button>
+            </div>
+
+            <div class="section-label">常规</div>
+            <div class="toggle-row">
+              <span>自动接受好友报价</span>
+              <label class="switch"><input type="checkbox" checked onchange="logToggle(this,'自动接受好友报价')"><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row">
+              <span>掉卡推送通知</span>
+              <label class="switch"><input type="checkbox" checked onchange="logToggle(this,'掉卡推送通知')"><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row">
+              <span>更新提醒</span>
+              <label class="switch"><input type="checkbox" checked onchange="logToggle(this,'更新提醒')"><span class="slider"></span></label>
+            </div>
+
+            <div class="section-label">关于</div>
             <div class="about-card">
-              <p>ASF-Go Android 客户端</p>
-              <p class="dim">原型 v0.1 · 对接 asf-go v0.5.0</p>
-              <a href="https://github.com/cyqmq/asf-go" target="_blank">🔗 asf-go 仓库</a>
+              <p>ASF-Go Android UI</p>
+              <p class="dim">v0.3.0 · 对接 asf-go v0.5.0</p>
+              <a href="https://github.com/cyqmq/asf-go" target="_blank">github.com/cyqmq/asf-go</a>
             </div>
+            <div style="height:24px"></div>
           </div>
         </section>
       </div>
 
+      <!-- 底部导航（5 个 Tab，纯图标） -->
       <nav class="bottom-nav">
-        <button class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')"><span>🏠</span><span>仪表盘</span></button>
-        <button class="nav-item" data-page="bots" onclick="switchPage('bots')"><span>🤖</span><span>机器人</span></button>
-        <button class="nav-item" data-page="commands" onclick="switchPage('commands')"><span>⌨️</span><span>命令</span></button>
-        <button class="nav-item" data-page="settings" onclick="switchPage('settings')"><span>⚙️</span><span>设置</span></button>
+        <button class="nav-btn active" data-page="status" onclick="switchPage('status')" title="仪表盘">
+          <svg class="nav-svg"><use href="#i-dashboard"/></svg>
+        </button>
+        <button class="nav-btn" data-page="console" onclick="switchPage('console')" title="命令控制台">
+          <svg class="nav-svg"><use href="#i-console"/></svg>
+        </button>
+        <button class="nav-btn" data-page="logs" onclick="switchPage('logs')" title="日志">
+          <svg class="nav-svg"><use href="#i-article"/></svg>
+        </button>
+        <button class="nav-btn" data-page="web" onclick="switchPage('web')" title="Web 管理界面">
+          <svg class="nav-svg"><use href="#i-globe"/></svg>
+        </button>
+        <button class="nav-btn" data-page="settings" onclick="switchPage('settings')" title="设置">
+          <svg class="nav-svg"><use href="#i-settings"/></svg>
+        </button>
       </nav>
     </div>
   </div>
+
+  <!-- 关于弹窗 -->
+  <div class="modal-mask hidden" id="about-modal" onclick="if(event.target===this)hideAbout()">
+    <div class="modal">
+      <h2>关于</h2>
+      <p class="dim">ASF-Go Android UI</p>
+      <p class="dim">v0.3.0 · asf-go v0.5.0</p>
+      <p class="dim">ArchiSteamFarm 的 Go 语言实现，本应用通过 IPC 接口管理挂卡机器人。</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="hideAbout()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
 
   <script src="app.js"></script>
 </body>
