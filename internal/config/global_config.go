@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	asfcrypto "github.com/asf-go/asf/internal/crypto"
 )
 
 // GlobalConfig 对应 C# 的 GlobalConfig 类，使用 PascalCase JSON 以兼容 ASF.json。
@@ -46,8 +49,19 @@ type GlobalConfig struct {
 	WebLimiterDelay           uint16   `json:"WebLimiterDelay"`
 	WebProxyText              string   `json:"WebProxy"`
 	WebProxyUsername          string   `json:"WebProxyUsername"`
+	WebProxyPassword          string   `json:"WebProxyPassword"`
 	SteamWebApiKey            string   `json:"SteamWebApiKey"`
 	IPCOrigins                []string `json:"IPCOrigins,omitempty"`
+}
+
+// GetDecryptedWebProxyPassword 返回解密后的全局 Web 代理密码。
+func (c *GlobalConfig) GetDecryptedWebProxyPassword() string {
+	if strings.HasPrefix(c.WebProxyPassword, "encrypted:") {
+		if decrypted, err := asfcrypto.DecryptAES(strings.TrimPrefix(c.WebProxyPassword, "encrypted:")); err == nil {
+			return decrypted
+		}
+	}
+	return c.WebProxyPassword
 }
 
 // Defaults 返回 ASF 默认全局配置。

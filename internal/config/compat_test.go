@@ -97,3 +97,28 @@ func TestLoadOriginalGlobalConfig(t *testing.T) {
 		t.Errorf("CommandPrefix = %q", cfg.CommandPrefix)
 	}
 }
+
+func TestGlobalConfigWebProxyPasswordField(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ASF.json")
+	json := `{
+		"WebProxy": "http://127.0.0.1:8080",
+		"WebProxyUsername": "user",
+		"WebProxyPassword": "pass"
+	}`
+	if err := os.WriteFile(path, []byte(json), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("加载配置失败: %v", err)
+	}
+	if cfg.WebProxyText != "http://127.0.0.1:8080" {
+		t.Errorf("WebProxyText = %q", cfg.WebProxyText)
+	}
+	if cfg.WebProxyUsername != "user" {
+		t.Errorf("WebProxyUsername = %q", cfg.WebProxyUsername)
+	}
+	if cfg.GetDecryptedWebProxyPassword() != "pass" {
+		t.Errorf("WebProxyPassword = %q", cfg.GetDecryptedWebProxyPassword())
+	}
+}

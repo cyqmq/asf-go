@@ -164,6 +164,7 @@ type BotConfig struct {
 	UserInterfaceMode            string             `json:"UserInterfaceMode"`
 	WebProxyText                 string             `json:"WebProxy"`
 	WebProxyUsername             string             `json:"WebProxyUsername"`
+	WebProxyPassword             string             `json:"WebProxyPassword"`
 }
 
 // DefaultBotConfig 返回默认 Bot 配置。
@@ -236,6 +237,27 @@ func (c *BotConfig) SetSteamPassword(plaintext string) {
 	}
 	c.SteamPassword = plaintext
 	c.PasswordFormat = "PlainText"
+}
+
+// GetDecryptedWebProxyPassword 返回解密后的 Web 代理密码。
+func (c *BotConfig) GetDecryptedWebProxyPassword() string {
+	if strings.HasPrefix(c.WebProxyPassword, "encrypted:") {
+		if decrypted, err := asfcrypto.DecryptAES(strings.TrimPrefix(c.WebProxyPassword, "encrypted:")); err == nil {
+			return decrypted
+		}
+	}
+	return c.WebProxyPassword
+}
+
+// SetWebProxyPassword 设置 Web 代理密码；启用 ASF_CRYPTKEY 时加密存储。
+func (c *BotConfig) SetWebProxyPassword(plaintext string) {
+	if asfcrypto.EncryptionEnabled() {
+		if encrypted, err := asfcrypto.EncryptAES(plaintext); err == nil {
+			c.WebProxyPassword = "encrypted:" + encrypted
+			return
+		}
+	}
+	c.WebProxyPassword = plaintext
 }
 
 // Save 将 Bot 配置写入指定路径。

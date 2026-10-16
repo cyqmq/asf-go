@@ -28,6 +28,11 @@ type WebSession struct {
 
 // NewWebSession 基于 go-steam Web 模块提供的会话凭证创建。
 func NewWebSession(sessionID, steamLoginSecure string) (*WebSession, error) {
+	return newWebSession(sessionID, steamLoginSecure, "", "", "")
+}
+
+// newWebSession 创建 Web 会话，可配置 HTTP 代理（对应原版 WebProxy）。
+func newWebSession(sessionID, steamLoginSecure, proxyText, proxyUsername, proxyPassword string) (*WebSession, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建 cookie jar 失败: %w", err)
@@ -43,7 +48,21 @@ func NewWebSession(sessionID, steamLoginSecure string) (*WebSession, error) {
 		}
 		jar.SetCookies(u, cookies)
 	}
-	return &WebSession{client: &http.Client{Jar: jar}, sessionID: sessionID, steamLoginSecure: steamLoginSecure}, nil
+
+	var client *http.Client
+	if proxyText != "" {
+		proxyURL, err := url.Parse(proxyText)
+		if err == nil {
+			if proxyUsername != "" {
+				proxyURL.User = url.UserPassword(proxyUsername, proxyPassword)
+			}
+			client = &http.Client{Jar: jar, Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+		}
+	}
+	if client == nil {
+		client = &http.Client{Jar: jar}
+	}
+	return &WebSession{client: client, sessionID: sessionID, steamLoginSecure: steamLoginSecure}, nil
 }
 
 // NewWebSessionWithClient 使用自定义 HTTP 客户端创建 Web 会话（主要用于测试）。

@@ -30,6 +30,7 @@ type Bot struct {
 	OnExit         func()
 	Blacklist      []uint64
 	FindBotSteamID func(name string) uint64
+	GlobalConfig   *config.GlobalConfig
 
 	configDir   string
 	loginKey    string
@@ -73,6 +74,19 @@ func New(name string, cfg *config.BotConfig, configDir string) (*Bot, error) {
 	return b, nil
 }
 
+// newSteamClient 创建 Steam 客户端，优先使用 BotConfig 代理，否则回退到 GlobalConfig 代理。
+func (b *Bot) newSteamClient(username, password, loginKey string) *steam.Client {
+	proxyText := b.Config.WebProxyText
+	proxyUsername := b.Config.WebProxyUsername
+	proxyPassword := b.Config.GetDecryptedWebProxyPassword()
+	if proxyText == "" && b.GlobalConfig != nil {
+		proxyText = b.GlobalConfig.WebProxyText
+		proxyUsername = b.GlobalConfig.WebProxyUsername
+		proxyPassword = b.GlobalConfig.GetDecryptedWebProxyPassword()
+	}
+	return steam.NewClientWithProxy(b.Log, username, password, loginKey, proxyText, proxyUsername, proxyPassword)
+}
+
 // Start 连接 Steam 并登录。
 
 func (b *Bot) Start() error {
@@ -86,7 +100,7 @@ func (b *Bot) Start() error {
 		return b.startQRLogin()
 	}
 
-	client := steam.NewClient(b.Log, b.Config.SteamLogin, b.Config.GetDecryptedSteamPassword(), b.loginKey)
+	client := b.newSteamClient(b.Config.SteamLogin, b.Config.GetDecryptedSteamPassword(), b.loginKey)
 	client.SetOnLoginKey(func(key string) {
 		b.loginKey = key
 		b.saveLoginKey()
@@ -125,7 +139,7 @@ func (b *Bot) Start() error {
 // 后台轮询扫码状态，确认后自动连接 CM 并登录。
 
 func (b *Bot) startQRLogin() error {
-	client := steam.NewClient(b.Log, "", "", "")
+	client := b.newSteamClient("", "", "")
 	client.SetOnLoginKey(func(key string) {
 		b.loginKey = key
 		b.saveLoginKey()

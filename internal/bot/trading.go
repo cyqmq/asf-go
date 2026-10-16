@@ -27,11 +27,12 @@ func (b *Bot) startTrading() {
 		if b.Config.SendTradePeriod > 0 {
 			b.autoSendLoot()
 		}
-		period := time.Duration(b.Config.TradingPeriod)
-		if period == 0 {
-			period = 1
+		// 交易报价检查周期（分钟），对应原版 TradeCheckPeriod
+		checkPeriod := time.Duration(b.Config.TradeCheckPeriod) * time.Minute
+		if checkPeriod == 0 {
+			checkPeriod = 60 * time.Minute
 		}
-		ticker := time.NewTicker(period * time.Hour)
+		ticker := time.NewTicker(checkPeriod)
 		defer ticker.Stop()
 
 		var sendC <-chan time.Time

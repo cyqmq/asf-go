@@ -41,6 +41,11 @@ type Client struct {
 
 	webSession *WebSession
 
+	// Web 代理配置（对应原版 BotConfig.WebProxy）
+	webProxyText     string
+	webProxyUsername string
+	webProxyPassword string
+
 	loggedOn       chan struct{}
 	isLoggedOn     atomic.Bool
 	stopCh         chan struct{}
@@ -49,15 +54,23 @@ type Client struct {
 
 // NewClient 创建 Steam 客户端。
 func NewClient(log *logging.Logger, username, password, loginKey string) *Client {
+	return NewClientWithProxy(log, username, password, loginKey, "", "", "")
+}
+
+// NewClientWithProxy 创建 Steam 客户端并配置 Web 代理。
+func NewClientWithProxy(log *logging.Logger, username, password, loginKey, proxyText, proxyUsername, proxyPassword string) *Client {
 	c := &Client{
-		inner:    steam.NewClient(),
-		log:      log,
-		events:   make(chan any, 64),
-		username: username,
-		password: password,
-		loginKey: loginKey,
-		loggedOn: make(chan struct{}),
-		stopCh:   make(chan struct{}),
+		inner:            steam.NewClient(),
+		log:              log,
+		events:           make(chan any, 64),
+		username:         username,
+		password:         password,
+		loginKey:         loginKey,
+		loggedOn:         make(chan struct{}),
+		stopCh:           make(chan struct{}),
+		webProxyText:     proxyText,
+		webProxyUsername: proxyUsername,
+		webProxyPassword: proxyPassword,
 	}
 	return c
 }
@@ -237,7 +250,7 @@ func (c *Client) InitWebSession() error {
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	ws, err := NewWebSession(c.inner.Web.SessionId, c.inner.Web.SteamLoginSecure)
+	ws, err := newWebSession(c.inner.Web.SessionId, c.inner.Web.SteamLoginSecure, c.webProxyText, c.webProxyUsername, c.webProxyPassword)
 	if err != nil {
 		return err
 	}

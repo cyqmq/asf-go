@@ -4,6 +4,8 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,7 +58,23 @@ func New(configPath string) (*ASF, error) {
 		bots:       map[string]*bot.Bot{},
 	}
 	asf.registerBuiltinPlugins()
+	applyGlobalWebProxy(cfg)
 	return asf, nil
+}
+
+// applyGlobalWebProxy 将全局 Web 代理应用到 http.DefaultTransport（影响更新检查、Steam API 等非 Bot 请求）。
+func applyGlobalWebProxy(cfg *config.GlobalConfig) {
+	if cfg == nil || cfg.WebProxyText == "" {
+		return
+	}
+	proxyURL, err := url.Parse(cfg.WebProxyText)
+	if err != nil {
+		return
+	}
+	if cfg.WebProxyUsername != "" {
+		proxyURL.User = url.UserPassword(cfg.WebProxyUsername, cfg.GetDecryptedWebProxyPassword())
+	}
+	http.DefaultTransport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
 }
 
 // Start 初始化并启动所有启用的 Bot。
@@ -154,6 +172,7 @@ func (a *ASF) initializeBot(botName string, cfg *config.BotConfig) error {
 	b.SteamAPIKey = a.Config.SteamWebApiKey
 	b.OwnerSteamID = a.Config.SteamOwnerID
 	b.ASFVersion = Version
+	b.GlobalConfig = a.Config
 	b.OnExit = func() { go func() { _ = a.Stop() }() }
 	b.FindBotSteamID = func(name string) uint64 {
 		for n, bb := range a.bots {

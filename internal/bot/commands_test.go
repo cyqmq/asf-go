@@ -372,3 +372,32 @@ func TestCommandFQAll(t *testing.T) {
 		t.Errorf("挂机队列应清空，实际: %v", b.Config.FarmingQueue)
 	}
 }
+
+func TestRemoteCommunicationAllowsSteam(t *testing.T) {
+	cfg := config.DefaultBotConfig()
+	cfg.RemoteCommunication = "All"
+	b := &Bot{Config: cfg}
+	if !b.remoteCommunicationAllowsSteam() {
+		t.Errorf("All 应允许 Steam 命令")
+	}
+	cfg.RemoteCommunication = "SteamGroup"
+	if !b.remoteCommunicationAllowsSteam() {
+		t.Errorf("SteamGroup 应允许 Steam 命令")
+	}
+	cfg.RemoteCommunication = "None"
+	if b.remoteCommunicationAllowsSteam() {
+		t.Errorf("None 应禁用 Steam 命令")
+	}
+	cfg.RemoteCommunication = "PublicListing"
+	if b.remoteCommunicationAllowsSteam() {
+		t.Errorf("PublicListing 不应允许 Steam 命令")
+	}
+	cfg.RemoteCommunication = "1"
+	if !b.remoteCommunicationAllowsSteam() {
+		t.Errorf("数字 1（SteamGroup）应允许 Steam 命令")
+	}
+	cfg.RemoteCommunication = "0"
+	if b.remoteCommunicationAllowsSteam() {
+		t.Errorf("数字 0（None）应禁用 Steam 命令")
+	}
+}

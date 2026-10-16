@@ -44,3 +44,27 @@ func TestGetDecryptedSteamPasswordLegacy(t *testing.T) {
 		t.Errorf("兼容明文配置应原样返回，实际: %q", got)
 	}
 }
+
+func TestSetWebProxyPassword(t *testing.T) {
+	t.Setenv("ASF_CRYPTKEY", "")
+	cfg := DefaultBotConfig()
+	cfg.SetWebProxyPassword("proxy-secret")
+	if cfg.WebProxyPassword != "proxy-secret" {
+		t.Errorf("未启用加密时应明文存储，实际: %q", cfg.WebProxyPassword)
+	}
+	if got := cfg.GetDecryptedWebProxyPassword(); got != "proxy-secret" {
+		t.Errorf("GetDecryptedWebProxyPassword = %q", got)
+	}
+}
+
+func TestSetWebProxyPasswordEncrypted(t *testing.T) {
+	t.Setenv("ASF_CRYPTKEY", strings.Repeat("ab", 32))
+	cfg := DefaultBotConfig()
+	cfg.SetWebProxyPassword("proxy-secret")
+	if cfg.WebProxyPassword == "proxy-secret" {
+		t.Fatalf("启用 ASF_CRYPTKEY 时应加密存储")
+	}
+	if got := cfg.GetDecryptedWebProxyPassword(); got != "proxy-secret" {
+		t.Errorf("解密后密码不匹配: %q", got)
+	}
+}

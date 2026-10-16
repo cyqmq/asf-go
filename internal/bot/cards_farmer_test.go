@@ -168,3 +168,22 @@ func TestApplyHoursLimit(t *testing.T) {
 		t.Errorf("新游戏应保留，实际: %v", games)
 	}
 }
+
+func TestApplyHoursLimitUsesMaxFarmingTime(t *testing.T) {
+	cfg := config.DefaultBotConfig()
+	cfg.HoursUntilCardDrops = 3
+	gc := config.Defaults()
+	gc.MaxFarmingTime = 1
+	cf := newTestFarmer(t, cfg)
+	cf.bot.GlobalConfig = gc
+	// 570 两小时前开始：HoursUntilCardDrops=3 未超，但 MaxFarmingTime=1 已超
+	cf.gameStartTimes[570] = time.Now().Add(-2 * time.Hour)
+	games := []GameInfo{
+		{AppID: 570, Name: "Dota2", CardsRemaining: 5},
+		{AppID: 440, Name: "TF2", CardsRemaining: 1},
+	}
+	games = cf.applyHoursLimit(games)
+	if len(games) != 1 || games[0].AppID != 440 {
+		t.Errorf("MaxFarmingTime=1 应过滤 2 小时前的游戏，实际: %v", games)
+	}
+}

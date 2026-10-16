@@ -30,9 +30,33 @@ func (b *Bot) checkAccess(chatterID uint64, min config.Access) bool {
 // handleCommand 处理 Steam 聊天命令（以 CommandPrefix 开头）。
 
 func (b *Bot) handleCommand(chatterID uint64, message string) {
+	if !b.remoteCommunicationAllowsSteam() {
+		return
+	}
 	reply := b.handleCommandText(chatterID, message)
 	if b.steamClient != nil {
 		b.steamClient.SendChatMessage(chatterID, reply)
+	}
+}
+
+// remoteCommunicationAllowsSteam 根据 RemoteCommunication 配置决定是否响应 Steam 聊天命令。
+// 支持 "All"/"SteamGroup"/"PublicListing"/"None" 或数字位标志（SteamGroup=1）。
+func (b *Bot) remoteCommunicationAllowsSteam() bool {
+	value := strings.ToLower(strings.TrimSpace(string(b.Config.RemoteCommunication)))
+	switch value {
+	case "", "all":
+		return true
+	case "none":
+		return false
+	case "publiclisting":
+		return false
+	case "steamgroup":
+		return true
+	default:
+		if n, err := strconv.ParseUint(value, 10, 8); err == nil {
+			return n&1 != 0
+		}
+		return true
 	}
 }
 

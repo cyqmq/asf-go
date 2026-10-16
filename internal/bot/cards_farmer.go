@@ -112,27 +112,72 @@ func (cf *CardsFarmer) loop() {
 			return
 		}
 
-		cf.farmOnce()
+		result := cf.farmOnce()
+
+		delay := cf.farmingDelay()
+		switch result {
+		case farmResultNone:
+			if idleDelay := cf.idleFarmingDelay(); idleDelay > 0 {
+				delay = idleDelay
+			}
+		case farmResultError:
+			if blockDelay := cf.minFarmingDelayAfterBlock(); blockDelay > 0 {
+				delay = blockDelay
+			}
+		}
 
 		select {
 		case <-stopCh:
 			return
-		case <-time.After(5 * time.Minute):
+		case <-time.After(delay):
 		}
 	}
 }
 
-// farmOnce 执行一轮挂机：解析页面、设置游玩游戏。
-func (cf *CardsFarmer) farmOnce() {
+// farmResult 表示一轮挂机的结果。
+type farmResult int
+
+const (
+	farmResultNone    farmResult = iota // 没有可挂机游戏
+	farmResultFarming                   // 正在挂机
+	farmResultError                     // 获取卡牌列表出错
+)
+
+// farmingDelay 返回正常挂机轮询延迟（GlobalConfig.FarmingDelay 分钟，默认 15 分钟）。
+func (cf *CardsFarmer) farmingDelay() time.Duration {
+	if cf.bot.GlobalConfig != nil && cf.bot.GlobalConfig.FarmingDelay > 0 {
+		return time.Duration(cf.bot.GlobalConfig.FarmingDelay) * time.Minute
+	}
+	return 5 * time.Minute
+}
+
+// idleFarmingDelay 返回空闲时的重新检查延迟（GlobalConfig.IdleFarmingPeriod 小时）。
+func (cf *CardsFarmer) idleFarmingDelay() time.Duration {
+	if cf.bot.GlobalConfig != nil && cf.bot.GlobalConfig.IdleFarmingPeriod > 0 {
+		return time.Duration(cf.bot.GlobalConfig.IdleFarmingPeriod) * time.Hour
+	}
+	return 0
+}
+
+// minFarmingDelayAfterBlock 返回疑似被封后的最小延迟（GlobalConfig.MinFarmingDelayAfterBlock 分钟）。
+func (cf *CardsFarmer) minFarmingDelayAfterBlock() time.Duration {
+	if cf.bot.GlobalConfig != nil && cf.bot.GlobalConfig.MinFarmingDelayAfterBlock > 0 {
+		return time.Duration(cf.bot.GlobalConfig.MinFarmingDelayAfterBlock) * time.Minute
+	}
+	return 0
+}
+
+// farmOnce 执行一轮挂机：解析页面、设置游玩游戏。返回本轮结果。
+func (cf *CardsFarmer) farmOnce() farmResult {
 	if cf.bot.steamClient == nil {
 		cf.log.Warn("Steam 客户端未就绪，跳过挂机")
-		return
+		return farmResultError
 	}
 
 	games, err := cf.fetchGamesWithDrops()
 	if err != nil {
 		cf.log.Error("获取卡牌掉落列表失败: %v", err)
-		return
+		return farmResultError
 	}
 
 	// 应用挂机黑名单过滤
@@ -175,7 +220,7 @@ func (cf *CardsFarmer) farmOnce() {
 	if len(games) == 0 {
 		cf.log.Info("没有发现仍有卡牌掉落的游戏")
 		cf.bot.steamClient.StopPlaying()
-		return
+		return farmResultNone
 	}
 
 	// 支持 CustomGamePlayedWhileFarming：用自定义游戏名替代真实挂机游戏
@@ -183,7 +228,7 @@ func (cf *CardsFarmer) farmOnce() {
 	if customGame != "" {
 		cf.log.Info("挂机显示自定义游戏: %s", customGame)
 		cf.bot.steamClient.StartPlayingWithNames([]steam.GamePlayedEntry{{Name: customGame}})
-		return
+		return farmResultFarming
 	}
 
 	appIDs := make([]uint64, 0, len(games))
@@ -192,6 +237,7 @@ func (cf *CardsFarmer) farmOnce() {
 		cf.log.Info("挂机游戏 %s (AppID=%d, 剩余卡牌=%d)", g.Name, g.AppID, g.CardsRemaining)
 	}
 	cf.bot.steamClient.StartPlaying(appIDs)
+	return farmResultFarming
 }
 
 // applyFarmingOrders 按 FarmingOrders 配置排序挂机游戏（Ascending/Descending，默认保持队列顺序）。
@@ -220,9 +266,13 @@ func (cf *CardsFarmer) applyFarmingOrders(games []GameInfo) {
 	}
 }
 
-// applyHoursLimit 应用 HoursUntilCardDrops：记录首次挂机时间，超时游戏从列表移除，返回过滤后的列表。
+// applyHoursLimit 应用 HoursUntilCardDrops（BotConfig）与 MaxFarmingTime（GlobalConfig）：
+// 记录首次挂机时间，超过较小限制的游戏放弃并换下一个，返回过滤后的列表。
 func (cf *CardsFarmer) applyHoursLimit(games []GameInfo) []GameInfo {
 	limit := cf.bot.Config.HoursUntilCardDrops
+	if cf.bot.GlobalConfig != nil && cf.bot.GlobalConfig.MaxFarmingTime > 0 && (limit == 0 || cf.bot.GlobalConfig.MaxFarmingTime < limit) {
+		limit = cf.bot.GlobalConfig.MaxFarmingTime
+	}
 	if limit == 0 {
 		return games
 	}
