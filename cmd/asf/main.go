@@ -16,7 +16,13 @@ import (
 func main() {
 	configPath := flag.String("config", "config", "ASF 配置目录（包含 ASF.json）")
 	ipcAddr := flag.String("ipc-addr", ":1242", "IPC 服务监听地址")
+	version := flag.Bool("version", false, "输出版本号并退出")
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("ASF Go 版 %s\n", core.Version)
+		os.Exit(0)
+	}
 
 	asf, err := core.New(*configPath)
 	if err != nil {

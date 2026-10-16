@@ -5,6 +5,8 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
     packagingOptions {
         jniLibs {
+            // 这些是 Go 静态链接的可执行文件（非标准动态库），不要 strip
+            keepDebugSymbols += "**/libasfgo.so"
             useLegacyPackaging true
         }
     }

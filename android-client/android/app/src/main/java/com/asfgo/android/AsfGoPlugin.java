@@ -1,5 +1,7 @@
 package com.asfgo.android;
 
+import android.content.res.AssetManager;
+
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -11,19 +13,37 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * 内置 asf-go 服务端。
+ *
+ * 二进制为 Go 静态链接的 PIE 可执行文件，打包在 jniLibs/arm64-v8a/libasfgo.so。
+ * Android 系统会将其解压到 nativeLibraryDir（可执行分区），从那里直接运行；
+ * 老版本 Android 若 nativeLibraryDir 不可用，则回退到从 assets 解压到 filesDir。
+ */
 @CapacitorPlugin(name = "AsfGo")
 public class AsfGoPlugin extends Plugin {
+    private static final String BINARY_NAME = "libasfgo.so";
+    private static final String ASSET_FALLBACK = "asf-go";
+
     private Process process;
 
     private File binaryFile() {
-        return new File(getContext().getApplicationInfo().nativeLibraryDir, "libasfgo.so");
+        return new File(getContext().getApplicationInfo().nativeLibraryDir, BINARY_NAME);
+    }
+
+    private File fallbackBinaryFile() {
+        return new File(getContext().getFilesDir(), "asf-go");
     }
 
     private File configDir() {
@@ -34,14 +54,29 @@ public class AsfGoPlugin extends Plugin {
         return new File(getContext().getFilesDir(), "asf-go.log");
     }
 
-    private void ensureBinary() throws IOException {
+    /**
+     * 优先使用 nativeLibraryDir 中的可执行文件；若不可用（老版本 Android），
+     * 从 assets 解压到 filesDir 并设置可执行权限（老版本 filesDir 可执行）。
+     */
+    private File ensureBinary() throws IOException {
         File bin = binaryFile();
-        if (!bin.exists() || bin.length() == 0) {
-            throw new IOException("内置 asf-go 二进制不存在: " + bin.getAbsolutePath());
+        if (bin.exists() && bin.length() > 0 && bin.canExecute()) {
+            return bin;
         }
-        if (!bin.canExecute()) {
-            throw new IOException("内置 asf-go 二进制不可执行: " + bin.getAbsolutePath());
+        // 兜底：从 assets 解压
+        File fallback = fallbackBinaryFile();
+        AssetManager am = getContext().getAssets();
+        try (InputStream in = am.open(ASSET_FALLBACK); OutputStream out = new FileOutputStream(fallback)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+            }
         }
+        if (!fallback.setExecutable(true)) {
+            throw new IOException("无法设置 asf-go 可执行权限: " + fallback.getAbsolutePath());
+        }
+        return fallback;
     }
 
     private void ensureConfig(String password) throws IOException {
@@ -73,23 +108,62 @@ public class AsfGoPlugin extends Plugin {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
+    /**
+     * 启动前自测：运行 "<binary> -version"，确保可执行且能正常运行。
+     */
+    private void selfTest(File bin) throws IOException {
+        Process p = new ProcessBuilder(bin.getAbsolutePath(), "-version")
+                .redirectErrorStream(true)
+                .start();
+        try {
+            int code = p.waitFor();
+            if (code != 0) {
+                throw new IOException("asf-go 自测失败 (exit=" + code + ")，请检查二进制");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("asf-go 自测被中断", e);
+        }
+    }
+
+    /**
+     * 构建子进程环境变量：HOME/TMPDIR 指向可写目录，PATH/LANG/SSL_CERT_DIR 指向系统路径。
+     */
+    private Map<String, String> buildEnvironment() {
+        File filesDir = getContext().getFilesDir();
+        File tmpDir = new File(getContext().getCacheDir(), "tmp");
+        if (!tmpDir.exists()) {
+            tmpDir.mkdirs();
+        }
+        Map<String, String> env = new HashMap<>();
+        env.put("HOME", filesDir.getAbsolutePath());
+        env.put("TMPDIR", tmpDir.getAbsolutePath());
+        env.put("PATH", "/system/bin:/vendor/bin");
+        env.put("LANG", "C.UTF-8");
+        // Android 系统 CA 证书目录（Go crypto/x509 会读取）
+        env.put("SSL_CERT_DIR", "/system/etc/security/cacerts");
+        return env;
+    }
+
     @PluginMethod
     public void start(PluginCall call) {
         try {
             String password = call.getString("password", "testpass");
-            ensureBinary();
+            File bin = ensureBinary();
             ensureConfig(password);
             if (process != null && process.isAlive()) {
                 call.resolve(new JSObject().put("running", true));
                 return;
             }
+            selfTest(bin);
             ProcessBuilder pb = new ProcessBuilder(
-                    binaryFile().getAbsolutePath(),
+                    bin.getAbsolutePath(),
                     "--config", configDir().getAbsolutePath(),
                     "--ipc-addr", "127.0.0.1:1242"
             );
             pb.redirectErrorStream(true);
             pb.redirectOutput(logFile());
+            pb.environment().putAll(buildEnvironment());
             process = pb.start();
             call.resolve(new JSObject().put("running", true));
         } catch (Exception e) {

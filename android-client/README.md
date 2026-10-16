@@ -30,8 +30,8 @@ cd android && ./gradlew assembleDebug
 
 ## 内置服务端 + IPC（已接入）
 
-- **内置 asf-go 服务端**：CI 构建时将 asf-go 交叉编译为 Android arm64 PIE 可执行文件（`GOOS=android CGO_ENABLED=0 -buildmode=pie`），作为 `jniLibs/arm64-v8a/libasfgo.so` 打包（`useLegacyPackaging true` 使其解压到可执行的 `nativeLibraryDir`）。
-  - Capacitor 原生插件 `AsfGoPlugin`：从 `nativeLibraryDir` 直接执行 `libasfgo.so`，写入默认 `ASF.json`（IPC 开启、密码可配），以 `--ipc-addr 127.0.0.1:1242` 启动子进程。
+- **内置 asf-go 服务端**：CI 构建时将 asf-go 交叉编译为 Android arm64 静态 PIE 可执行文件（`CGO_ENABLED=0 GOOS=android GOARCH=arm64 -buildmode=pie`），作为 `jniLibs/arm64-v8a/libasfgo.so` 打包（`useLegacyPackaging true` 解压到可执行的 `nativeLibraryDir`，`keepDebugSymbols` 防止 strip）。
+  - Capacitor 原生插件 `AsfGoPlugin`：从 `nativeLibraryDir` 执行 `libasfgo.so`（兜底：老版本从 assets 解压到 filesDir + setExecutable）；启动前先运行 `-version` 自测；设置环境变量 `HOME=filesDir`、`TMPDIR=cacheDir/tmp`、`SSL_CERT_DIR=/system/etc/security/cacerts`；以 `--ipc-addr 127.0.0.1:1242` 启动子进程。asf-go 新增 `-version` 参数供自测。
   - UI「启动 ASF 服务」按钮：调用插件启动内置服务 → 轮询 `GET /api/asf` 直到 IPC 就绪。
 - **远程服务器模式**：无原生插件（浏览器预览）或配置了远程地址时，连接外部 asf-go。
 - IPC 调用：
