@@ -21,12 +21,12 @@ func newCommandTestBot(t *testing.T) *Bot {
 		t.Fatalf("创建日志失败: %v", err)
 	}
 	return &Bot{
-		Name:         "testbot",
-		Config:       cfg,
-		Log:          log,
+		Name:          "testbot",
+		Config:        cfg,
+		Log:           log,
 		CommandPrefix: "!",
-		configDir:    dir,
-		OwnerSteamID: 76561198000000001,
+		configDir:     dir,
+		OwnerSteamID:  76561198000000001,
 	}
 }
 
@@ -129,9 +129,9 @@ func TestFairExchange(t *testing.T) {
 	card := assetTypeKey{appID: 753, itemType: "TradingCard"}
 
 	cases := []struct {
-		name    string
-		give    map[assetTypeKey]uint32
-		receive map[assetTypeKey]uint32
+		name     string
+		give     map[assetTypeKey]uint32
+		receive  map[assetTypeKey]uint32
 		expected bool
 	}{
 		{"公平交换", map[assetTypeKey]uint32{card: 1}, map[assetTypeKey]uint32{card: 1}, true},
@@ -226,4 +226,72 @@ func TestCommandInventoryNoClient(t *testing.T) {
 	if !strings.Contains(reply, "查询库存失败") {
 		t.Errorf("无连接时 !inventory 应报错，实际: %q", reply)
 	}
+}
+
+func TestCommandBGR(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!bgr ABCDE-12345")
+	if !strings.Contains(reply, "已添加") {
+		t.Fatalf("!bgr 应添加成功，实际: %q", reply)
+	}
+	// 重复添加
+	reply = b.handleCommandText(76561198000000001, "!bgr ABCDE-12345")
+	if !strings.Contains(reply, "已在") {
+		t.Errorf("重复添加应提示已存在，实际: %q", reply)
+	}
+	// 查看
+	reply = b.handleCommandText(76561198000000001, "!keys")
+	if !strings.Contains(reply, "ABCDE-12345") {
+		t.Errorf("!keys 应包含新 key，实际: %q", reply)
+	}
+	// 移除
+	reply = b.handleCommandText(76561198000000001, "!bgrm ABCDE-12345")
+	if !strings.Contains(reply, "剩余 0 个") {
+		t.Errorf("!bgrm 应移除成功，实际: %q", reply)
+	}
+	// 清空
+	reply = b.handleCommandText(76561198000000001, "!bgr XYZ-999")
+	if !strings.Contains(reply, "已添加") {
+		t.Fatalf("再次添加失败: %q", reply)
+	}
+	reply = b.handleCommandText(76561198000000001, "!bgrclear")
+	if !strings.Contains(reply, "已清空") {
+		t.Errorf("!bgrclear 应清空，实际: %q", reply)
+	}
+}
+
+func TestCommandHash(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!hash secret")
+	if !strings.HasPrefix(reply, "SCrypt 哈希: ") {
+		t.Errorf("!hash 应返回 SCrypt 哈希，实际: %q", reply)
+	}
+}
+
+func TestCommandEncrypt(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!encrypt secret")
+	if !strings.HasPrefix(reply, "加密结果: ") {
+		t.Errorf("!encrypt 应返回加密结果，实际: %q", reply)
+	}
+}
+
+func TestCommandPrivacyNotConnected(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!privacy 3 3 3 3 3 3 1")
+	if !strings.Contains(reply, "尚未登录") {
+		t.Errorf("未连接时 !privacy 应提示未登录，实际: %q", reply)
+	}
+}
+
+func TestCommandPrivacyInvalidArgs(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!privacy 9")
+	if !strings.Contains(reply, "无效") {
+		t.Errorf("非法隐私值应提示无效，实际: %q", reply)
+	}
+}
+
+func TestCommandReset(t *testing.T) {
+	t.Skip("!reset 触发网络重连，在集成环境验证")
 }

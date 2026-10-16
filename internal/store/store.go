@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/asf-go/asf/internal/steam"
@@ -229,4 +230,78 @@ func AddFreeLicense(ws *steam.WebSession, subID uint64) (AddFreeLicenseResult, e
 	default:
 		return AddFreeLicenseResult{Result: EResultFail, PurchaseResultDetail: EPurchaseResultDetailNoDetail}, nil
 	}
+}
+
+// ECommunityPrivacy 对应 SteamKit2.ECommunityPrivacy。
+const (
+	ECommunityPrivacyInvalid     = 0
+	ECommunityPrivacyPrivate     = 1
+	ECommunityPrivacyFriendsOnly = 2
+	ECommunityPrivacyPublic      = 3
+)
+
+// ECommentPermission 对应 SteamKit2.ECommentPermission。
+const (
+	ECommentPermissionFriendsOnly = 0
+	ECommentPermissionAnyone      = 1
+	ECommentPermissionSelfOnly    = 2
+)
+
+// PrivacySettings 对应原版 UserPrivacy.PrivacySettings 的 JSON 结构。
+type PrivacySettings struct {
+	PrivacyProfile        int `json:"PrivacyProfile"`
+	PrivacyOwnedGames     int `json:"PrivacyOwnedGames"`
+	PrivacyPlaytime       int `json:"PrivacyPlaytime"`
+	PrivacyFriendsList    int `json:"PrivacyFriendsList"`
+	PrivacyInventory      int `json:"PrivacyInventory"`
+	PrivacyInventoryGifts int `json:"PrivacyInventoryGifts"`
+}
+
+// SetPrivacy 通过 Steam 社区 ajaxsetprivacy 接口修改个人资料隐私设置。
+// ECommunityPrivacy: 1=私密 2=好友 3=公开；ECommentPermission: 0=好友 1=任何人 2=仅自己。
+func SetPrivacy(ws *steam.WebSession, steamID uint64, settings PrivacySettings, commentPermission int) (bool, error) {
+	if ws == nil {
+		return false, fmt.Errorf("Web 会话为空")
+	}
+	reqURL := fmt.Sprintf("https://steamcommunity.com/profiles/%d/ajaxsetprivacy", steamID)
+	privacyJSON, err := json.Marshal(settings)
+	if err != nil {
+		return false, fmt.Errorf("序列化隐私设置失败: %w", err)
+	}
+
+	form := url.Values{}
+	form.Set("sessionid", ws.SessionID())
+	form.Set("eCommentPermission", strconv.Itoa(commentPermission))
+	form.Set("Privacy", string(privacyJSON))
+
+	req, err := http.NewRequest(http.MethodPost, reqURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return false, fmt.Errorf("构造请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := ws.HTTPClient().Do(req)
+	if err != nil {
+		return false, fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("隐私设置返回状态码 %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("读取响应失败: %w", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(body, &result); err != nil {
+		return false, nil
+	}
+	// 响应可能是 {"success":1} 或 {"result":1}
+	if v, ok := result["success"].(float64); ok {
+		return v != 0, nil
+	}
+	if v, ok := result["result"].(float64); ok {
+		return v == 1, nil
+	}
+	return false, nil
 }

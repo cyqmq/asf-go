@@ -274,3 +274,15 @@ func (b *Bot) Update() (string, error) {
 
 // UpdateCheck 检查上游 ASF 是否有新版本。
 // UnpackBoosters 打开库存中所有补充包，返回开包数量。
+
+// SetPrivacy 修改 Steam 社区隐私设置（对应原版 !privacy）。
+func (b *Bot) SetPrivacy(settings store.PrivacySettings, commentPermission int) (bool, error) {
+	if b.steamClient == nil || !b.steamClient.LoggedOn() {
+		return false, fmt.Errorf("Bot %s 尚未登录", b.Name)
+	}
+	ws := b.steamClient.WebSessionOrNil()
+	if ws == nil {
+		return false, fmt.Errorf("Bot %s 无 Web 会话", b.Name)
+	}
+	return store.SetPrivacy(ws, b.SteamID(), settings, commentPermission)
+}

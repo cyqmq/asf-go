@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/asf-go/asf/internal/config"
+	asfcrypto "github.com/asf-go/asf/internal/crypto"
+	"github.com/asf-go/asf/internal/store"
 )
 
 func (b *Bot) checkAccess(chatterID uint64, min config.Access) bool {
@@ -53,7 +55,7 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 
 	switch {
 	case lower == "help":
-		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, 2faok, 2fano, mafile, password, keys, batch <key...>, inventory, play <appid...>, input <code>, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
+		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, 2faok, 2fano, mafile, password, keys, batch <key...>, inventory, play <appid...>, input <code>, privacy <settings...>, bgr <key>, bgrc, bgrm <key>, bgrclear, hash <text>, encrypt <text>, reset, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
 	case lower == "status":
 		if !b.checkAccess(chatterID, config.AccessOperator) {
 			reply = "权限不足"
@@ -323,6 +325,178 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 		} else {
 			reply = "验证码已设置，正在重新登录..."
 		}
+	case lower == "privacy" || strings.HasPrefix(lower, "privacy "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		args := strings.Fields(command[len("privacy"):])
+		if len(args) == 0 {
+			reply = "用法: !privacy <profile> [ownedGames] [playtime] [friendsList] [inventory] [inventoryGifts] [comments]；隐私值 1=私密 2=好友 3=公开，comments 0=好友 1=任何人 2=仅自己"
+			break
+		}
+		if len(args) > 7 {
+			reply = "参数过多，最多 7 个"
+			break
+		}
+		values := []int{store.ECommunityPrivacyPrivate, store.ECommunityPrivacyPrivate, store.ECommunityPrivacyPrivate, store.ECommunityPrivacyPrivate, store.ECommunityPrivacyPrivate, store.ECommunityPrivacyPrivate, store.ECommentPermissionSelfOnly}
+		valid := true
+		for i, arg := range args {
+			v, err := strconv.Atoi(arg)
+			if err != nil || v < 0 || v > 3 {
+				reply = fmt.Sprintf("第 %d 个参数 %q 无效，隐私值应为 1/2/3（comments 为 0/1/2）", i+1, arg)
+				valid = false
+				break
+			}
+			values[i] = v
+		}
+		if !valid {
+			break
+		}
+		settings := store.PrivacySettings{
+			PrivacyProfile:        values[0],
+			PrivacyOwnedGames:     values[1],
+			PrivacyPlaytime:       values[2],
+			PrivacyFriendsList:    values[3],
+			PrivacyInventory:      values[4],
+			PrivacyInventoryGifts: values[5],
+		}
+		ok, err := b.SetPrivacy(settings, values[6])
+		if err != nil {
+			reply = fmt.Sprintf("修改隐私失败: %v", err)
+			break
+		}
+		if ok {
+			reply = "隐私设置已更新"
+		} else {
+			reply = "修改隐私失败（Steam 返回错误）"
+		}
+	case lower == "bgr" || strings.HasPrefix(lower, "bgr "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		keyArg := strings.TrimSpace(command[len("bgr"):])
+		if keyArg == "" {
+			reply = "用法: !bgr <key>，或 !bgrc/!bgrclear 清空、!bgrm <key> 移除"
+			break
+		}
+		bgrFile := filepath.Join(b.configDir, b.Name+".games-to-redeem-in-background")
+		keys := []string{}
+		if data, err := os.ReadFile(bgrFile); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					keys = append(keys, line)
+				}
+			}
+		}
+		if containsString(keys, keyArg) {
+			reply = "该 key 已在后台兑换列表中"
+			break
+		}
+		keys = append(keys, keyArg)
+		sort.Strings(keys)
+		if err := os.WriteFile(bgrFile, []byte(strings.Join(keys, "\n")+"\n"), 0o600); err != nil {
+			reply = fmt.Sprintf("写入后台兑换列表失败: %v", err)
+			break
+		}
+		reply = fmt.Sprintf("已添加 key 到后台兑换列表，共 %d 个", len(keys))
+	case lower == "bgrc" || lower == "bgrclear":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		bgrFile := filepath.Join(b.configDir, b.Name+".games-to-redeem-in-background")
+		if err := os.WriteFile(bgrFile, nil, 0o600); err != nil {
+			reply = fmt.Sprintf("清空后台兑换列表失败: %v", err)
+			break
+		}
+		reply = "后台兑换列表已清空"
+	case lower == "bgrm" || strings.HasPrefix(lower, "bgrm "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		keyArg := strings.TrimSpace(command[len("bgrm"):])
+		if keyArg == "" {
+			reply = "用法: !bgrm <key>"
+			break
+		}
+		bgrFile := filepath.Join(b.configDir, b.Name+".games-to-redeem-in-background")
+		keys := []string{}
+		if data, err := os.ReadFile(bgrFile); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					keys = append(keys, line)
+				}
+			}
+		}
+		remaining := keys[:0]
+		found := false
+		for _, k := range keys {
+			if k == keyArg {
+				found = true
+				continue
+			}
+			remaining = append(remaining, k)
+		}
+		if !found {
+			reply = "后台兑换列表中不存在该 key"
+			break
+		}
+		sort.Strings(remaining)
+		if err := os.WriteFile(bgrFile, []byte(strings.Join(remaining, "\n")+"\n"), 0o600); err != nil {
+			reply = fmt.Sprintf("写入后台兑换列表失败: %v", err)
+			break
+		}
+		reply = fmt.Sprintf("已从后台兑换列表移除 key，剩余 %d 个", len(remaining))
+	case lower == "hash" || strings.HasPrefix(lower, "hash "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		text := strings.TrimSpace(command[len("hash"):])
+		if text == "" {
+			reply = "用法: !hash <text>，返回 SCrypt 哈希（IPC 密码格式）"
+			break
+		}
+		hash, err := asfcrypto.HashSCrypt(text)
+		if err != nil {
+			reply = fmt.Sprintf("哈希计算失败: %v", err)
+			break
+		}
+		reply = fmt.Sprintf("SCrypt 哈希: %s", hash)
+	case lower == "encrypt" || strings.HasPrefix(lower, "encrypt "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		text := strings.TrimSpace(command[len("encrypt"):])
+		if text == "" {
+			reply = "用法: !encrypt <text>，返回 ASF 加密后的密码"
+			break
+		}
+		encrypted, err := asfcrypto.EncryptAES(text)
+		if err != nil {
+			reply = fmt.Sprintf("加密失败: %v", err)
+			break
+		}
+		reply = fmt.Sprintf("加密结果: %s", encrypted)
+	case lower == "reset" || lower == "rp":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		if err := os.Remove(b.loginKeyPath()); err != nil && !os.IsNotExist(err) {
+			reply = fmt.Sprintf("删除登录 Key 失败: %v", err)
+			break
+		}
+		b.loginKey = ""
+		reply = "已重置登录 Key，正在重新登录..."
+		b.stopModules()
+		go b.scheduleReconnect()
 	case lower == "fb":
 		if !b.checkAccess(chatterID, config.AccessMaster) {
 			reply = "权限不足"
@@ -605,3 +779,13 @@ func (b *Bot) statsText() string {
 }
 
 // String 实现 fmt.Stringer。
+
+// containsString 判断字符串切片是否包含目标。
+func containsString(list []string, target string) bool {
+	for _, s := range list {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
