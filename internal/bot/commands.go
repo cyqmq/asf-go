@@ -35,8 +35,19 @@ func (b *Bot) handleCommand(chatterID uint64, message string) {
 	}
 	reply := b.handleCommandText(chatterID, message)
 	if b.steamClient != nil {
+		if prefix := b.messagePrefix(); prefix != "" {
+			reply = prefix + reply
+		}
 		b.steamClient.SendChatMessage(chatterID, reply)
 	}
+}
+
+// messagePrefix 返回 Steam 消息前缀（GlobalConfig.SteamMessagePrefix，如 "/me "）。
+func (b *Bot) messagePrefix() string {
+	if b.GlobalConfig != nil {
+		return b.GlobalConfig.SteamMessagePrefix
+	}
+	return ""
 }
 
 // remoteCommunicationAllowsSteam 根据 RemoteCommunication 配置决定是否响应 Steam 聊天命令。

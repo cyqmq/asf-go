@@ -84,7 +84,20 @@ func (b *Bot) newSteamClient(username, password, loginKey string) *steam.Client 
 		proxyUsername = b.GlobalConfig.WebProxyUsername
 		proxyPassword = b.GlobalConfig.GetDecryptedWebProxyPassword()
 	}
+	b.checkSteamProtocols()
 	return steam.NewClientWithProxy(b.Log, username, password, loginKey, proxyText, proxyUsername, proxyPassword)
+}
+
+// checkSteamProtocols 校验 SteamProtocols 配置。go-steam 仅支持 TCP 连接，
+// 当用户指定 WebSocket/UDP 时记录警告（原版支持协议选择，本构建受限）。
+func (b *Bot) checkSteamProtocols() {
+	if b.GlobalConfig == nil {
+		return
+	}
+	protocols := strings.ToLower(strings.TrimSpace(b.GlobalConfig.SteamProtocols))
+	if protocols == "websocket" || protocols == "udp" || protocols == "web" {
+		b.Log.Warn("SteamProtocols=%s 但当前构建仅支持 TCP 连接，已忽略", b.GlobalConfig.SteamProtocols)
+	}
 }
 
 // Start 连接 Steam 并登录。
@@ -307,6 +320,9 @@ func (b *Bot) scheduleReconnect() {
 	go func() {
 		defer b.reconnecting.Store(false)
 		delay := time.Second
+		if b.GlobalConfig != nil && b.GlobalConfig.LoginLimiterDelay > 0 {
+			delay = time.Duration(b.GlobalConfig.LoginLimiterDelay) * time.Second
+		}
 		for attempt := 1; attempt <= 5; attempt++ {
 			time.Sleep(delay)
 			b.Log.Info("Bot %s 尝试自动重连（第 %d 次）", b.Name, attempt)

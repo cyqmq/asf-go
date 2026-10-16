@@ -401,3 +401,24 @@ func TestRemoteCommunicationAllowsSteam(t *testing.T) {
 		t.Errorf("数字 0（None）应禁用 Steam 命令")
 	}
 }
+
+func TestMessagePrefix(t *testing.T) {
+	b := newCommandTestBot(t)
+	if got := b.messagePrefix(); got != "" {
+		t.Errorf("无 GlobalConfig 时前缀应为空，实际 %q", got)
+	}
+	gc := config.Defaults()
+	gc.SteamMessagePrefix = "/me "
+	b.GlobalConfig = gc
+	if got := b.messagePrefix(); got != "/me " {
+		t.Errorf("SteamMessagePrefix 应为 /me ，实际 %q", got)
+	}
+}
+
+func TestCheckSteamProtocolsWebSocketWarns(t *testing.T) {
+	b := newCommandTestBot(t)
+	gc := config.Defaults()
+	gc.SteamProtocols = "WebSocket"
+	b.GlobalConfig = gc
+	b.checkSteamProtocols() // 不应 panic
+}

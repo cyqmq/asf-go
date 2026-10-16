@@ -134,6 +134,20 @@ func (b *Bot) handleTradeOffer(offer trading.TradeOffer) {
 		return
 	}
 
+	// MaxTradeHoldDuration：拒绝 escrow hold 超过配置上限的报价
+	if b.GlobalConfig != nil && b.GlobalConfig.MaxTradeHoldDuration > 0 && offer.EscrowEndDate > 0 {
+		holdEnd := time.Unix(int64(offer.EscrowEndDate), 0)
+		hold := time.Until(holdEnd)
+		if hold > 0 && hold.Hours() >= float64(b.GlobalConfig.MaxTradeHoldDuration)*24 {
+			b.Log.Info("报价 %d 的 escrow hold 约 %d 天，超过上限 %d 天，拒绝",
+				offer.TradeOfferID, int(hold.Hours()/24), b.GlobalConfig.MaxTradeHoldDuration)
+			if err := trading.DeclineTradeOffer(b.steamClient.WebSessionOrNil(), offer.TradeOfferID); err != nil {
+				b.Log.Warn("拒绝报价 %d 失败: %v", offer.TradeOfferID, err)
+			}
+			return
+		}
+	}
+
 	// 允许列表：非空且不在列表中则拒绝
 	if len(b.Config.TradingAllowableSteamIDs) > 0 && !containsUint64(b.Config.TradingAllowableSteamIDs, partnerSteamID) {
 		b.Log.Info("报价 %d 不在允许列表，拒绝", offer.TradeOfferID)
