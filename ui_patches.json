@@ -1,0 +1,8 @@
+{
+  "_comment": "ASF-ui 硬编码链接补丁集。升级 UI 后运行 ./scripts/patch_ui.py 自动重放这些替换，然后重建二进制。wiki 文档链接（ArchiSteamFarm/wiki/*）保留不替换，因为内容只存在于上游。",
+  "https://github.com/JustArchiNET/ArchiSteamFarm/releases/tag/": "https://github.com/cyqmq/asf-go/releases/tag/",
+  "https://github.com/JustArchiNET/ArchiSteamFarm/discussions": "https://github.com/cyqmq/asf-go/discussions",
+  "https://github.com/JustArchiNET/ASF-ui/issues/new/choose": "https://github.com/cyqmq/asf-go/issues/new/choose",
+  "https://github.com/JustArchiNET/ASF-UI/issues/new/choose": "https://github.com/cyqmq/asf-go/issues/new/choose",
+  "https://github.com/JustArchiNET/ASF-ui/wiki": "https://github.com/cyqmq/asf-go"
+}

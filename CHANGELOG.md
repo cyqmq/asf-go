@@ -5,6 +5,15 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## UI 同步
+
+- 当前内嵌 ASF-ui 构建产物来源：**原版 ASF 6.3.10.6 release 的 `www/`**（未修改 UI 逻辑/样式）。
+- 硬编码 GitHub 链接补丁集：`ui_patches.json`（将 `JustArchiNET/*` 链接替换为本项目 `cyqmq/asf-go`）。
+- 升级 UI 后运行：`make ui-upgrade VERSION=<asf-version>`（下载 → 解压替换 www → 打补丁 → 重算 SRI），或手动替换后 `make ui-patch`。
+- 维护脚本：`scripts/patch_ui.py`（应用链接补丁）、`scripts/update_sri.py`（重算 SRI 哈希）。
+- ASF 文档 wiki 链接（`ArchiSteamFarm/wiki/*`）**保留不替换**：内容只存在于上游，且 `/api/www/github/wiki/*` 代理上游。
+- 契约测试：`internal/ipc/contract_test.go` 验证 `/api/asf`、`/api/bot/ASF`、`/api/type/*`、`/api/structure/*` 的字段与 UI 依赖一致。
+
 ## [Unreleased]
 
 ## [0.5.0] - 2026-10-15
