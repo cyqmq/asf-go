@@ -48,6 +48,10 @@ type Bot struct {
 	qrSession      *steam.QRLoginSession
 	qrChallengeURL string
 	qrStopCh       chan struct{}
+
+	// 主动匹配黑名单（对应原版 BotDatabase.MatchActivelyBlacklistAppIDs）
+	mabMutex  sync.RWMutex
+	mabAppIDs []uint32
 }
 
 // New 创建 Bot 实例。configDir 用于持久化登录 Key。
@@ -65,6 +69,7 @@ func New(name string, cfg *config.BotConfig, configDir string) (*Bot, error) {
 	}
 	b.loginKey = b.loadLoginKey()
 	b.auth = b.loadAuthenticator()
+	b.loadMAB()
 	return b, nil
 }
 

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	asfcrypto "github.com/asf-go/asf/internal/crypto"
 	"github.com/asf-go/asf/internal/authenticator"
+	asfcrypto "github.com/asf-go/asf/internal/crypto"
 	"github.com/asf-go/asf/internal/store"
 )
 

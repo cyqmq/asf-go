@@ -55,7 +55,7 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 
 	switch {
 	case lower == "help":
-		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, 2faok, 2fano, mafile, password, keys, batch <key...>, inventory, play <appid...>, input <code>, privacy <settings...>, bgr <key>, bgrc, bgrm <key>, bgrclear, hash <text>, encrypt <text>, reset, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key>, level, points, stats, version, update, exit, help"
+		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, 2faok, 2fano, mafile, password, keys, batch <key...>, inventory, play <appid...>, input <code>, privacy <settings...>, bgr <key>, bgrc, bgrm <key>, bgrclear, hash <text>, encrypt <text>, reset, mab, mabadd <appid...>, mabrm <appid...|all>, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key> [flags], level, points, stats, version, update, exit, help"
 	case lower == "status":
 		if !b.checkAccess(chatterID, config.AccessOperator) {
 			reply = "权限不足"
@@ -497,6 +497,60 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 		reply = "已重置登录 Key，正在重新登录..."
 		b.stopModules()
 		go b.scheduleReconnect()
+	case lower == "mab":
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		reply = b.formatMAB()
+	case lower == "mabadd" || strings.HasPrefix(lower, "mabadd "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		arg := strings.TrimSpace(command[len("mabadd"):])
+		if arg == "" {
+			reply = "用法: !mabadd <appid[,appid...]>"
+			break
+		}
+		appIDs, err := parseAppIDs(arg)
+		if err != nil {
+			reply = fmt.Sprintf("无效 appid: %v", err)
+			break
+		}
+		if err := b.MatchActivelyBlacklistAdd(appIDs); err != nil {
+			reply = fmt.Sprintf("保存失败: %v", err)
+		} else {
+			reply = fmt.Sprintf("已将 %d 个游戏加入主动匹配黑名单", len(appIDs))
+		}
+	case lower == "mabrm" || strings.HasPrefix(lower, "mabrm "):
+		if !b.checkAccess(chatterID, config.AccessMaster) {
+			reply = "权限不足"
+			break
+		}
+		arg := strings.TrimSpace(command[len("mabrm"):])
+		if arg == "" {
+			reply = "用法: !mabrm <appid[,appid...]|all>"
+			break
+		}
+		if strings.EqualFold(arg, "all") {
+			if err := b.MatchActivelyBlacklistRemove(nil); err != nil {
+				reply = fmt.Sprintf("保存失败: %v", err)
+			} else {
+				reply = "已清空主动匹配黑名单"
+			}
+			break
+		}
+		appIDs, err := parseAppIDs(arg)
+		if err != nil {
+			reply = fmt.Sprintf("无效 appid: %v", err)
+			break
+		}
+		if err := b.MatchActivelyBlacklistRemove(appIDs); err != nil {
+			reply = fmt.Sprintf("保存失败: %v", err)
+		} else {
+			reply = fmt.Sprintf("已将 %d 个游戏移出主动匹配黑名单", len(appIDs))
+		}
 	case lower == "fb":
 		if !b.checkAccess(chatterID, config.AccessMaster) {
 			reply = "权限不足"
@@ -531,7 +585,16 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 			reply = "权限不足"
 			break
 		}
-		appID, err := strconv.ParseUint(strings.TrimSpace(command[len("fbrm"):]), 10, 32)
+		arg := strings.TrimSpace(command[len("fbrm"):])
+		if strings.EqualFold(arg, "all") {
+			if err := b.FarmingBlacklistClear(); err != nil {
+				reply = fmt.Sprintf("保存失败: %v", err)
+			} else {
+				reply = "已清空挂机黑名单"
+			}
+			break
+		}
+		appID, err := strconv.ParseUint(arg, 10, 32)
 		if err != nil {
 			reply = "无效 appid"
 		} else {
@@ -575,7 +638,16 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 			reply = "权限不足"
 			break
 		}
-		appID, err := strconv.ParseUint(strings.TrimSpace(command[len("fqrm"):]), 10, 32)
+		arg := strings.TrimSpace(command[len("fqrm"):])
+		if strings.EqualFold(arg, "all") {
+			if err := b.FarmingQueueClear(); err != nil {
+				reply = fmt.Sprintf("保存失败: %v", err)
+			} else {
+				reply = "已清空挂机队列"
+			}
+			break
+		}
+		appID, err := strconv.ParseUint(arg, 10, 32)
 		if err != nil {
 			reply = "无效 appid"
 		} else {
@@ -721,9 +793,17 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 		}
 		arg := strings.TrimSpace(command[len("redeem"):])
 		if arg == "" {
-			reply = "用法: !redeem <激活码> [激活码...]"
+			reply = "用法: !redeem <激活码> [flags]，flags: ff(转发失败) fawk(假定钱包码) fd/sd/sf/si/skmg/fkmg/v"
 		} else {
-			resp, err := b.Redeem(strings.Fields(arg))
+			fields := strings.Fields(arg)
+			keys := []string{fields[0]}
+			flagFields := fields[1:]
+			flags, err := ParseRedeemFlags(flagFields)
+			if err != nil {
+				reply = fmt.Sprintf("无效 flag: %v", err)
+				break
+			}
+			resp, err := b.RedeemWithFlags(keys, flags)
 			if err != nil {
 				reply = fmt.Sprintf("兑换失败: %v", err)
 			} else {
@@ -788,4 +868,21 @@ func containsString(list []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// parseAppIDs 解析逗号分隔的 appid 列表。
+func parseAppIDs(text string) ([]uint32, error) {
+	fields := strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ' ' || r == ';' })
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("无 appid")
+	}
+	appIDs := make([]uint32, 0, len(fields))
+	for _, f := range fields {
+		v, err := strconv.ParseUint(f, 10, 32)
+		if err != nil || v == 0 {
+			return nil, fmt.Errorf("%q", f)
+		}
+		appIDs = append(appIDs, uint32(v))
+	}
+	return appIDs, nil
 }

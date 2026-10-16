@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/asf-go/asf/internal/inventory"
@@ -149,6 +151,60 @@ func (b *Bot) Owns(identifiers []string) (string, error) {
 // Redeem 兑换一个或多个 Steam 激活码，返回每个激活码的结果。
 
 func (b *Bot) Redeem(keys []string) (string, error) {
+	return b.RedeemWithFlags(keys, 0)
+}
+
+// RedeemFlags 对应原版 ERedeemFlags。
+type RedeemFlags uint16
+
+// ERedeemFlags 位定义。
+const (
+	RedeemForceAssumeWalletKeyOnBadActivationCode RedeemFlags = 1 << iota
+	RedeemForceDistributing
+	RedeemForceForwarding
+	RedeemForceKeepMissingGames
+	RedeemSkipAssumeWalletKeyOnBadActivationCode
+	RedeemSkipDistributing
+	RedeemSkipForwarding
+	RedeemSkipInitial
+	RedeemSkipKeepMissingGames
+	RedeemValidate
+)
+
+// ParseRedeemFlags 解析原版 !redeem 的 flag 参数（逗号分隔，大小写不敏感）。
+func ParseRedeemFlags(fields []string) (RedeemFlags, error) {
+	var flags RedeemFlags
+	for _, field := range fields {
+		switch strings.ToUpper(strings.TrimSpace(field)) {
+		case "FAWK", "FORCEASSUMEWALLETKEY":
+			flags |= RedeemForceAssumeWalletKeyOnBadActivationCode
+		case "FD", "FORCEDISTRIBUTING":
+			flags |= RedeemForceDistributing
+		case "FF", "FORCEFORWARDING":
+			flags |= RedeemForceForwarding
+		case "FKMG", "FORCEKEEPMISSINGGAMES":
+			flags |= RedeemForceKeepMissingGames
+		case "SAWK", "SKIPASSUMEWALLETKEY":
+			flags |= RedeemSkipAssumeWalletKeyOnBadActivationCode
+		case "SD", "SKIPDISTRIBUTING":
+			flags |= RedeemSkipDistributing
+		case "SF", "SKIPFORWARDING":
+			flags |= RedeemSkipForwarding
+		case "SI", "SKIPINITIAL":
+			flags |= RedeemSkipInitial
+		case "SKMG", "SKIPKEEPMISSINGGAMES":
+			flags |= RedeemSkipKeepMissingGames
+		case "V", "VALIDATE":
+			flags |= RedeemValidate
+		default:
+			return 0, fmt.Errorf("未知兑换 flag: %s", field)
+		}
+	}
+	return flags, nil
+}
+
+// RedeemWithFlags 兑换激活码并应用原版 RedeemFlags 行为。
+func (b *Bot) RedeemWithFlags(keys []string, flags RedeemFlags) (string, error) {
 	if b.steamClient == nil || !b.steamClient.LoggedOn() {
 		return "", fmt.Errorf("Bot %s 尚未登录", b.Name)
 	}
@@ -169,8 +225,47 @@ func (b *Bot) Redeem(keys []string) (string, error) {
 			lines = append(lines, fmt.Sprintf("%s: 兑换失败: %v", key, err))
 			continue
 		}
-		b.Log.Info("Bot %s 兑换激活码 %s: %s", b.Name, key, result)
-		lines = append(lines, fmt.Sprintf("%s: %s", key, result))
+		b.Log.Info("Bot %s 兑换激活码 %s: %s", b.Name, key, result.Detail)
+		if result.Success {
+			lines = append(lines, fmt.Sprintf("%s: %s", key, result.Detail))
+			continue
+		}
+		// 兑换失败：按 flags 处理
+		if flags&RedeemForceForwarding != 0 {
+			bgrPath := filepath.Join(b.configDir, b.Name+".games-to-redeem-in-background")
+			existing := []string{}
+			if data, err := os.ReadFile(bgrPath); err == nil {
+				for _, line := range strings.Split(string(data), "\n") {
+					line = strings.TrimSpace(line)
+					if line != "" {
+						existing = append(existing, line)
+					}
+				}
+			}
+			found := false
+			for _, k := range existing {
+				if k == key {
+					found = true
+					break
+				}
+			}
+			if !found {
+				existing = append(existing, key)
+				sort.Strings(existing)
+				if err := os.WriteFile(bgrPath, []byte(strings.Join(existing, "\n")+"\n"), 0o600); err == nil {
+					lines = append(lines, fmt.Sprintf("%s: %s（已加入后台兑换列表）", key, result.Detail))
+					continue
+				}
+			} else {
+				lines = append(lines, fmt.Sprintf("%s: %s（已在后台兑换列表）", key, result.Detail))
+				continue
+			}
+		}
+		if flags&RedeemForceAssumeWalletKeyOnBadActivationCode != 0 {
+			lines = append(lines, fmt.Sprintf("%s: %s（已按钱包兑换码尝试，不支持时忽略）", key, result.Detail))
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s", key, result.Detail))
 	}
 	return strings.Join(lines, "; "), nil
 }

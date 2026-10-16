@@ -295,3 +295,80 @@ func TestCommandPrivacyInvalidArgs(t *testing.T) {
 func TestCommandReset(t *testing.T) {
 	t.Skip("!reset 触发网络重连，在集成环境验证")
 }
+
+func TestCommandMAB(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!mab")
+	if !strings.Contains(reply, "为空") {
+		t.Fatalf("空 MAB 应提示为空，实际: %q", reply)
+	}
+	reply = b.handleCommandText(76561198000000001, "!mabadd 730,570,440")
+	if !strings.Contains(reply, "已将") {
+		t.Fatalf("!mabadd 应成功，实际: %q", reply)
+	}
+	reply = b.handleCommandText(76561198000000001, "!mab")
+	if !strings.Contains(reply, "730") || !strings.Contains(reply, "570") || !strings.Contains(reply, "440") {
+		t.Errorf("!mab 应列出全部 appid，实际: %q", reply)
+	}
+	reply = b.handleCommandText(76561198000000001, "!mabrm all")
+	if !strings.Contains(reply, "已清空") {
+		t.Errorf("!mabrm all 应清空，实际: %q", reply)
+	}
+	reply = b.handleCommandText(76561198000000001, "!mab")
+	if !strings.Contains(reply, "为空") {
+		t.Errorf("清空后 !mab 应为空，实际: %q", reply)
+	}
+}
+
+func TestParseRedeemFlags(t *testing.T) {
+	flags, err := ParseRedeemFlags([]string{"ff", "fawk", "fd"})
+	if err != nil {
+		t.Fatalf("解析 flags 失败: %v", err)
+	}
+	if flags&RedeemForceForwarding == 0 || flags&RedeemForceAssumeWalletKeyOnBadActivationCode == 0 || flags&RedeemForceDistributing == 0 {
+		t.Errorf("flags 解析不完整: %b", flags)
+	}
+	if _, err := ParseRedeemFlags([]string{"bogus"}); err == nil {
+		t.Errorf("未知 flag 应报错")
+	}
+}
+
+func TestCommandRedeemFlags(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!redeem ABCDE-12345 ff")
+	if !strings.Contains(reply, "尚未登录") {
+		t.Errorf("未登录时 !redeem 应提示未登录，实际: %q", reply)
+	}
+	reply = b.handleCommandText(76561198000000001, "!redeem ABCDE-12345 bogus")
+	if !strings.Contains(reply, "无效 flag") {
+		t.Errorf("未知 flag 应报错，实际: %q", reply)
+	}
+}
+
+func TestCommandFBAll(t *testing.T) {
+	b := newCommandTestBot(t)
+	if err := b.FarmingBlacklistAdd(730); err != nil {
+		t.Fatalf("添加黑名单失败: %v", err)
+	}
+	reply := b.handleCommandText(76561198000000001, "!fbrm all")
+	if !strings.Contains(reply, "已清空") {
+		t.Fatalf("!fbrm all 应清空，实际: %q", reply)
+	}
+	if len(b.Config.FarmingBlacklist) != 0 {
+		t.Errorf("挂机黑名单应清空，实际: %v", b.Config.FarmingBlacklist)
+	}
+}
+
+func TestCommandFQAll(t *testing.T) {
+	b := newCommandTestBot(t)
+	if err := b.FarmingQueueAdd(570); err != nil {
+		t.Fatalf("添加队列失败: %v", err)
+	}
+	reply := b.handleCommandText(76561198000000001, "!fqrm all")
+	if !strings.Contains(reply, "已清空") {
+		t.Fatalf("!fqrm all 应清空，实际: %q", reply)
+	}
+	if len(b.Config.FarmingQueue) != 0 {
+		t.Errorf("挂机队列应清空，实际: %v", b.Config.FarmingQueue)
+	}
+}

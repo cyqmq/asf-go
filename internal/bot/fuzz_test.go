@@ -37,12 +37,12 @@ func FuzzHandleCommandText(f *testing.F) {
 		panic(err)
 	}
 	b := &Bot{
-		Name:         "fuzzbot",
-		Config:       config.DefaultBotConfig(),
-		Log:          log,
+		Name:          "fuzzbot",
+		Config:        config.DefaultBotConfig(),
+		Log:           log,
 		CommandPrefix: "!",
-		configDir:    dir,
-		OwnerSteamID: 76561198000000001,
+		configDir:     dir,
+		OwnerSteamID:  76561198000000001,
 	}
 	var mu sync.Mutex
 

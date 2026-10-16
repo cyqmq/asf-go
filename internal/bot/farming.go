@@ -187,3 +187,15 @@ func (b *Bot) SteamLevel() (int, error) {
 }
 
 // statsText 生成 Bot 统计文本。
+
+// FarmingBlacklistClear 清空挂机黑名单并保存配置。
+func (b *Bot) FarmingBlacklistClear() error {
+	b.Config.FarmingBlacklist = nil
+	return b.saveConfig()
+}
+
+// FarmingQueueClear 清空挂机队列并保存配置。
+func (b *Bot) FarmingQueueClear() error {
+	b.Config.FarmingQueue = nil
+	return b.saveConfig()
+}
