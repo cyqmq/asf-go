@@ -80,22 +80,7 @@
     </defs>
   </svg>
 
-  <div class="page-header">
-    <h1>ASF-Go <span>Android UI</span></h1>
-    <p>仪表盘融合两版特点 · 机器人管理功能页 · 纯矢量图标</p>
-  </div>
-
-  <div class="stage">
-    <div class="phone">
-      <div class="status-bar">
-        <span>09:41</span>
-        <span class="status-icons">
-          <span class="signal"><i></i><i></i><i></i><i></i></span>
-          <span class="battery"><span class="battery-fill"></span></span>
-        </span>
-      </div>
-
-      <div class="screen">
+  <main class="app-root">
 
         <!-- ═══ 仪表盘（融合两版特点） ═══ -->
         <section class="page active" id="page-status">
@@ -197,7 +182,7 @@
             <div class="console-body" id="console-body">
               <div class="msg bot">
                 <div class="avatar"><svg class="icon-16"><use href="#i-server"/></svg></div>
-                <div class="bubble mono">已连接 asf-go v0.5.0。输入 <b>status</b>、<b>pause</b>、<b>resume</b> 等命令。</div>
+                <div class="bubble mono">启动服务后，输入 <b>status</b>、<b>pause</b>、<b>resume</b> 等命令管理机器人。</div>
               </div>
             </div>
             <div class="console-input">
@@ -217,14 +202,7 @@
                 <svg class="icon-18"><use href="#i-download"/></svg>
               </button>
             </div>
-            <div class="log-container" id="log-container">
-              <div class="log-line info"><span class="log-time">03:05:11</span><span class="log-lvl INFO">INFO</span><span>ASF-Go v0.5.0 已启动</span></div>
-              <div class="log-line info"><span class="log-time">03:05:12</span><span class="log-lvl INFO">INFO</span><span>IPC 服务监听于 0.0.0.0:1242</span></div>
-              <div class="log-line warn"><span class="log-time">03:05:12</span><span class="log-lvl WARN">WARN</span><span>oldbot 未配置 Steam 凭据，保持离线</span></div>
-              <div class="log-line info"><span class="log-time">03:05:13</span><span class="log-lvl INFO">INFO</span><span>Web 管理界面已就绪</span></div>
-              <div class="log-line error"><span class="log-time">03:05:14</span><span class="log-lvl ERROR">ERROR</span><span>GitHub 更新检查失败（限流）</span></div>
-              <div class="log-line info"><span class="log-time">03:05:15</span><span class="log-lvl INFO">INFO</span><span>等待用户操作…</span></div>
-            </div>
+            <div class="log-container" id="log-container"></div>
           </div>
         </section>
 
@@ -239,73 +217,9 @@
             </div>
             <div class="bots-body">
               <div class="bots-summary">
-                <span class="summary-chip">在线 <b id="sum-online">2</b></span>
-                <span class="summary-chip">挂机中 <b id="sum-farming">1</b></span>
-                <span class="summary-chip">离线 <b id="sum-offline">1</b></span>
-              </div>
-
-              <div class="bot-row" data-status="farming" onclick="toggleBotDetail('testbot')">
-                <div class="bot-avatar" style="background:linear-gradient(135deg,#2b6cb0,#66c0f4)">T</div>
-                <div class="bot-main">
-                  <div class="bot-name">testbot <span class="bot-status farming">挂机中</span></div>
-                  <div class="bot-sub">TF2 (440) · 剩余 5 卡</div>
-                </div>
-                <div class="bot-actions" onclick="event.stopPropagation()">
-                  <button class="bot-act" onclick="botAction('testbot','暂停')" title="暂停"><svg class="icon-14"><use href="#i-pause-fill"/></svg></button>
-                  <button class="bot-act primary" onclick="botAction('testbot','恢复')" title="恢复"><svg class="icon-14"><use href="#i-play-fill"/></svg></button>
-                </div>
-              </div>
-              <div class="bot-detail hidden" id="detail-testbot">
-                <div class="detail-row"><span>SteamID</span><span class="mono">7656119XXXXXXXXXX</span></div>
-                <div class="detail-row"><span>钱包余额</span><span>¥2.35</span></div>
-                <div class="detail-row"><span>挂机进度</span><span class="progress"><i style="width:50%"></i></span></div>
-                <div class="detail-actions">
-                  <button onclick="botAction('testbot','暂停')">暂停</button>
-                  <button onclick="botAction('testbot','恢复')">恢复</button>
-                  <button onclick="botAction('testbot','停止')">停止</button>
-                  <button onclick="toastMsg('已请求 2FA 确认')">2FA</button>
-                </div>
-              </div>
-
-              <div class="bot-row" data-status="online" onclick="toggleBotDetail('testbot2')">
-                <div class="bot-avatar" style="background:linear-gradient(135deg,#1f6f43,#3fb950)">T2</div>
-                <div class="bot-main">
-                  <div class="bot-name">testbot2 <span class="bot-status online">在线</span></div>
-                  <div class="bot-sub">空闲 · 无挂机游戏</div>
-                </div>
-                <div class="bot-actions" onclick="event.stopPropagation()">
-                  <button class="bot-act primary" onclick="botAction('testbot2','启动')" title="启动"><svg class="icon-14"><use href="#i-play-fill"/></svg></button>
-                  <button class="bot-act" onclick="botAction('testbot2','暂停')" title="暂停"><svg class="icon-14"><use href="#i-pause-fill"/></svg></button>
-                </div>
-              </div>
-              <div class="bot-detail hidden" id="detail-testbot2">
-                <div class="detail-row"><span>SteamID</span><span class="mono">7656119XXXXXXXXXX</span></div>
-                <div class="detail-row"><span>钱包余额</span><span>¥0.00</span></div>
-                <div class="detail-row"><span>挂机进度</span><span class="progress"><i style="width:0%"></i></span></div>
-                <div class="detail-actions">
-                  <button onclick="botAction('testbot2','启动')">启动</button>
-                  <button onclick="botAction('testbot2','暂停')">暂停</button>
-                  <button onclick="toastMsg('已发送 2FA 确认')">2FA</button>
-                </div>
-              </div>
-
-              <div class="bot-row" data-status="offline" onclick="toggleBotDetail('oldbot')">
-                <div class="bot-avatar" style="background:linear-gradient(135deg,#6e7681,#8b949e)">O</div>
-                <div class="bot-main">
-                  <div class="bot-name">oldbot <span class="bot-status offline">离线</span></div>
-                  <div class="bot-sub">上次在线 3 天前</div>
-                </div>
-                <div class="bot-actions" onclick="event.stopPropagation()">
-                  <button class="bot-act primary" onclick="botAction('oldbot','启动')" title="启动"><svg class="icon-14"><use href="#i-play-fill"/></svg></button>
-                </div>
-              </div>
-              <div class="bot-detail hidden" id="detail-oldbot">
-                <div class="detail-row"><span>SteamID</span><span class="mono">7656119XXXXXXXXXX</span></div>
-                <div class="detail-row"><span>状态</span><span>离线 · 需重新登录</span></div>
-                <div class="detail-actions">
-                  <button onclick="botAction('oldbot','启动')">启动</button>
-                  <button onclick="toastMsg('已请求 QR 登录')">QR 登录</button>
-                </div>
+                <span class="summary-chip">在线 <b id="sum-online">0</b></span>
+                <span class="summary-chip">挂机中 <b id="sum-farming">0</b></span>
+                <span class="summary-chip">离线 <b id="sum-offline">0</b></span>
               </div>
 
               <button class="btn-secondary filled add-bot" onclick="toastMsg('新建机器人需在服务器端创建配置文件')">添加机器人</button>
@@ -409,8 +323,7 @@
           <svg class="nav-svg"><use href="#i-settings"/></svg>
         </button>
       </nav>
-    </div>
-  </div>
+  </main>
 
   <!-- 关于弹窗 -->
   <div class="modal-mask hidden" id="about-modal" onclick="if(event.target===this)hideAbout()">
