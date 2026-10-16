@@ -302,7 +302,7 @@ func (b *Bot) stopModules() {
 // 供聊天命令 !input 与 IPC /api/bot/{name}/input 使用。
 func (b *Bot) SubmitInput(code string) error {
 	if b.steamClient == nil {
-		return fmt.Errorf("Steam 客户端未就绪")
+		return fmt.Errorf("steam 客户端未就绪")
 	}
 	if strings.TrimSpace(code) == "" {
 		return fmt.Errorf("验证码为空")

@@ -61,7 +61,7 @@ func TestASFEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("状态码应为 200，得到 %d", resp.StatusCode)
 	}
@@ -92,7 +92,7 @@ func TestUnauthorized(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("无认证应返回 401，得到 %d", resp.StatusCode)
 	}
@@ -111,7 +111,7 @@ func TestCommandsEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("状态码应为 200，得到 %d", resp.StatusCode)
 	}
@@ -129,7 +129,7 @@ func TestIPCBanOnRepeatedFailures(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("第 %d 次错误密码应返回 401，得到 %d", i+1, resp.StatusCode)
 		}
@@ -142,7 +142,7 @@ func TestIPCBanOnRepeatedFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("封禁后应返回 403，得到 %d", resp.StatusCode)
 	}
@@ -154,7 +154,7 @@ func TestIPCBanOnRepeatedFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("封禁后访问 Bans 应返回 403，得到 %d", resp.StatusCode)
 	}
@@ -182,7 +182,7 @@ func TestIPCBanOnRepeatedFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("解封后错误密码应返回 401，得到 %d", resp.StatusCode)
 	}
@@ -198,7 +198,7 @@ func TestIPCBansEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("无认证访问 Bans 应返回 401，得到 %d", resp.StatusCode)
 	}
@@ -210,7 +210,7 @@ func TestIPCBansEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("认证后应返回 200，得到 %d", resp.StatusCode)
 	}

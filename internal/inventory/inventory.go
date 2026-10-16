@@ -39,7 +39,7 @@ type Response struct {
 // appID 例如 753（Steam 社区物品）或 730（CS2）；contextID 例如 6（交易卡片）或 2（CS2 库存）。
 func GetOwnInventory(ws *steam.WebSession, steamID uint64, appID uint32, contextID uint64) (*Response, error) {
 	if ws == nil {
-		return nil, fmt.Errorf("Web 会话为空")
+		return nil, fmt.Errorf("web 会话为空")
 	}
 	inv, err := inventory.GetOwnInventory(ws.HTTPClient(), contextID, appID)
 	if err != nil {

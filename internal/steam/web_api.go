@@ -95,7 +95,7 @@ func (w *WebSession) GetBadgePage(page uint8) (*goquery.Document, error) {
 	if err != nil {
 		return nil, fmt.Errorf("请求卡牌页面失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("卡牌页面返回状态码 %d", resp.StatusCode)
 	}

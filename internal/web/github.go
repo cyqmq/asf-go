@@ -100,7 +100,7 @@ func (g *GitHubClient) GetLatestRelease(owner, repo string, stable bool) (*GitHu
 	if err != nil {
 		return nil, fmt.Errorf("请求 GitHub 失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub 返回状态码 %d", resp.StatusCode)
 	}
@@ -132,7 +132,7 @@ func (g *GitHubClient) GetRelease(owner, repo, tag string) (*GitHubRelease, erro
 	if err != nil {
 		return nil, fmt.Errorf("请求 GitHub 失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub 返回状态码 %d", resp.StatusCode)
 	}
@@ -161,7 +161,7 @@ func (g *GitHubClient) GetWikiPage(page, revision string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("请求 wiki 页面失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("wiki 页面返回状态码 %d", resp.StatusCode)
 	}
@@ -195,7 +195,7 @@ func (g *GitHubClient) GetWikiHistory(page string) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("请求 wiki 历史失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("wiki 历史返回状态码 %d", resp.StatusCode)
 	}
@@ -227,10 +227,10 @@ func CompareVersions(a, b string) int {
 	for i := 0; i < maxLen; i++ {
 		var x, y int
 		if i < len(pa) {
-			fmt.Sscanf(pa[i], "%d", &x)
+			_, _ = fmt.Sscanf(pa[i], "%d", &x)
 		}
 		if i < len(pb) {
-			fmt.Sscanf(pb[i], "%d", &y)
+			_, _ = fmt.Sscanf(pb[i], "%d", &y)
 		}
 		if x > y {
 			return 1
@@ -258,7 +258,7 @@ func (g *GitHubClient) DownloadAsset(asset *GitHubAsset, destPath string) error 
 	if err != nil {
 		return fmt.Errorf("下载失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("下载返回状态码 %d", resp.StatusCode)
 	}
@@ -267,7 +267,7 @@ func (g *GitHubClient) DownloadAsset(asset *GitHubAsset, destPath string) error 
 	if err != nil {
 		return fmt.Errorf("创建文件失败: %w", err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return fmt.Errorf("写入文件失败: %w", err)

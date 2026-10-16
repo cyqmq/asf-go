@@ -45,7 +45,7 @@ func New(configPath string) (*ASF, error) {
 
 	cfg, err := config.Load(filepath.Join(configPath, "ASF.json"))
 	if err != nil {
-		log.Close()
+		_ = log.Close()
 		return nil, err
 	}
 
@@ -211,10 +211,10 @@ func (a *ASF) UpdateGlobalConfig(cfg *config.GlobalConfig) error {
 // UpdateBotConfig 更新指定 Bot 的配置并保存；若 Bot 不存在则创建新 Bot（对应原版 POST /api/Bot/{name} 的创建/更新语义）。
 func (a *ASF) UpdateBotConfig(botName string, cfg *config.BotConfig) error {
 	if botName == "" {
-		return fmt.Errorf("Bot 名称为空")
+		return fmt.Errorf("bot 名称为空")
 	}
 	if cfg == nil {
-		return fmt.Errorf("Bot 配置为空")
+		return fmt.Errorf("bot 配置为空")
 	}
 	if b, ok := a.bots[botName]; ok {
 		b.Config = cfg
@@ -240,7 +240,7 @@ func (a *ASF) UpdateBotConfig(botName string, cfg *config.BotConfig) error {
 func (a *ASF) RemoveBot(botName string) error {
 	b, ok := a.bots[botName]
 	if !ok {
-		return fmt.Errorf("Bot %s 不存在", botName)
+		return fmt.Errorf("bot %s 不存在", botName)
 	}
 	_ = b.Stop()
 	_ = os.Remove(filepath.Join(a.ConfigPath, botName+".json"))
@@ -252,11 +252,11 @@ func (a *ASF) RemoveBot(botName string) error {
 // RenameBot 重命名指定 Bot（对应原版 BotController /Rename）。
 func (a *ASF) RenameBot(oldName, newName string) error {
 	if oldName == "" || newName == "" {
-		return fmt.Errorf("Bot 名称不能为空")
+		return fmt.Errorf("bot 名称不能为空")
 	}
 	b, ok := a.bots[oldName]
 	if !ok {
-		return fmt.Errorf("Bot %s 不存在", oldName)
+		return fmt.Errorf("bot %s 不存在", oldName)
 	}
 	oldPath := filepath.Join(a.ConfigPath, oldName+".json")
 	newPath := filepath.Join(a.ConfigPath, newName+".json")
@@ -335,7 +335,7 @@ func (a *ASF) Update() (string, error) {
 		return "", fmt.Errorf("创建临时文件失败: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	if err := client.DownloadAsset(asset, tmpPath); err != nil {
 		_ = os.Remove(tmpPath)

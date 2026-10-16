@@ -33,7 +33,7 @@ func (b *Bot) GetInventory(appID uint32, contextID uint64) (*inventory.Response,
 	}
 	ws, err := b.steamClient.WebSession()
 	if err != nil {
-		return nil, fmt.Errorf("Web 会话不可用: %w", err)
+		return nil, fmt.Errorf("web 会话不可用: %w", err)
 	}
 	steamID := b.steamClient.SteamID()
 	if steamID == 0 {
@@ -50,7 +50,7 @@ func (b *Bot) UnpackBoosters() (int, error) {
 	}
 	ws, err := b.steamClient.WebSession()
 	if err != nil {
-		return 0, fmt.Errorf("Web 会话不可用: %w", err)
+		return 0, fmt.Errorf("web 会话不可用: %w", err)
 	}
 	steamID := b.steamClient.SteamID()
 	if steamID == 0 {
@@ -143,7 +143,7 @@ func fetchSteamLevel(b *Bot, steamID uint64) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("查询等级失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("等级接口返回状态码 %d", resp.StatusCode)
 	}

@@ -11,10 +11,6 @@ func encryptAES(text string) (string, error) {
 	return asfcrypto.EncryptAES(text)
 }
 
-func decryptAES(cipherText string) (string, error) {
-	return asfcrypto.DecryptAES(cipherText)
-}
-
 func hashSCrypt(text string) (string, error) {
 	return asfcrypto.HashSCrypt(text)
 }

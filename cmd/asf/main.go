@@ -26,7 +26,7 @@ func main() {
 
 	if err := asf.Start(); err != nil {
 		asf.Log.Error("启动失败: %v", err)
-		asf.Stop()
+		_ = asf.Stop()
 		os.Exit(1)
 	}
 

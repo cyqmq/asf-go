@@ -127,7 +127,9 @@ func (c *Client) HasAccessToken() bool {
 
 // Connect 连接 Steam 网络并等待登录完成（带超时）。
 func (c *Client) Connect(timeout time.Duration) error {
-	c.inner.Connect()
+	if _, err := c.inner.Connect(); err != nil {
+		return fmt.Errorf("连接 Steam 失败: %w", err)
+	}
 	go c.eventLoop()
 
 	select {
@@ -135,7 +137,7 @@ func (c *Client) Connect(timeout time.Duration) error {
 		c.log.Info("Steam 登录成功 (%s)", c.username)
 		return nil
 	case <-time.After(timeout):
-		return errors.New("Steam 登录超时")
+		return errors.New("steam 登录超时")
 	}
 }
 
@@ -210,9 +212,6 @@ func (c *Client) eventLoop() {
 					c.onDisconnect()
 				}
 
-			case steam.FatalErrorEvent:
-				c.log.Error("Steam 致命错误: %v", ev)
-
 			case error:
 				c.log.Error("Steam 错误: %v", ev)
 			}
@@ -262,7 +261,7 @@ func (c *Client) InitWebSession() error {
 // WebSession 返回已初始化的 Web 会话。
 func (c *Client) WebSession() (*WebSession, error) {
 	if c.webSession == nil {
-		return nil, errors.New("Web 会话尚未初始化")
+		return nil, errors.New("web 会话尚未初始化")
 	}
 	return c.webSession, nil
 }

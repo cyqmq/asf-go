@@ -68,7 +68,7 @@ func (r RedeemKeyResult) String() string {
 // POST https://store.steampowered.com/account/ajaxregisterkey/）。
 func RedeemKey(ws *steam.WebSession, key string) (RedeemKeyResult, error) {
 	if ws == nil {
-		return RedeemKeyResult{}, fmt.Errorf("Web 会话为空")
+		return RedeemKeyResult{}, fmt.Errorf("web 会话为空")
 	}
 	key = strings.TrimSpace(key)
 	if key == "" {
@@ -89,7 +89,7 @@ func RedeemKey(ws *steam.WebSession, key string) (RedeemKeyResult, error) {
 	if err != nil {
 		return RedeemKeyResult{}, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -123,7 +123,7 @@ func RedeemKey(ws *steam.WebSession, key string) (RedeemKeyResult, error) {
 // POST https://steamcommunity.com/profiles/{steamID}/ajaxunpackbooster）。
 func UnpackBooster(ws *steam.WebSession, steamID uint64, appID uint32, itemID uint64) (bool, error) {
 	if ws == nil {
-		return false, fmt.Errorf("Web 会话为空")
+		return false, fmt.Errorf("web 会话为空")
 	}
 	if appID == 0 || itemID == 0 {
 		return false, fmt.Errorf("appID/itemID 无效")
@@ -144,7 +144,7 @@ func UnpackBooster(ws *steam.WebSession, steamID uint64, appID uint32, itemID ui
 	if err != nil {
 		return false, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -166,7 +166,7 @@ func UnpackBooster(ws *steam.WebSession, steamID uint64, appID uint32, itemID ui
 // 需要已初始化的 Web 会话（sessionid + steamLoginSecure Cookie）。
 func AddFreeLicense(ws *steam.WebSession, subID uint64) (AddFreeLicenseResult, error) {
 	if ws == nil {
-		return AddFreeLicenseResult{}, fmt.Errorf("Web 会话为空")
+		return AddFreeLicenseResult{}, fmt.Errorf("web 会话为空")
 	}
 	if subID == 0 {
 		return AddFreeLicenseResult{}, fmt.Errorf("subID 无效")
@@ -186,7 +186,7 @@ func AddFreeLicense(ws *steam.WebSession, subID uint64) (AddFreeLicenseResult, e
 	if err != nil {
 		return AddFreeLicenseResult{}, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -261,7 +261,7 @@ type PrivacySettings struct {
 // ECommunityPrivacy: 1=私密 2=好友 3=公开；ECommentPermission: 0=好友 1=任何人 2=仅自己。
 func SetPrivacy(ws *steam.WebSession, steamID uint64, settings PrivacySettings, commentPermission int) (bool, error) {
 	if ws == nil {
-		return false, fmt.Errorf("Web 会话为空")
+		return false, fmt.Errorf("web 会话为空")
 	}
 	reqURL := fmt.Sprintf("https://steamcommunity.com/profiles/%d/ajaxsetprivacy", steamID)
 	privacyJSON, err := json.Marshal(settings)
@@ -284,7 +284,7 @@ func SetPrivacy(ws *steam.WebSession, steamID uint64, settings PrivacySettings, 
 	if err != nil {
 		return false, fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("隐私设置返回状态码 %d", resp.StatusCode)
 	}

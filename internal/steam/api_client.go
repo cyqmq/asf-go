@@ -43,7 +43,7 @@ func FetchPointsBalance(apiKey, steamID string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("GetPointsBalance 请求失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("GetPointsBalance 返回状态码 %d", resp.StatusCode)
 	}

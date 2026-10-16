@@ -66,7 +66,7 @@ func getResult(t *testing.T, addr, path string) map[string]any {
 	if err != nil {
 		t.Fatalf("请求 %s 失败: %v", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("%s 状态码应为 200，得到 %d", path, resp.StatusCode)
 	}

@@ -53,7 +53,7 @@ type ConfirmationsResponse struct {
 // 需要 Web 会话 Cookie（steamcommunity.com）。
 func GetConfirmations(ws *steam.WebSession, steamID uint64, deviceID, confirmationHash string, time int64) ([]Confirmation, error) {
 	if ws == nil {
-		return nil, fmt.Errorf("Web 会话为空")
+		return nil, fmt.Errorf("web 会话为空")
 	}
 
 	query := url.Values{}
@@ -76,7 +76,7 @@ func GetConfirmations(ws *steam.WebSession, steamID uint64, deviceID, confirmati
 	if err != nil {
 		return nil, fmt.Errorf("请求确认列表失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -94,7 +94,7 @@ func GetConfirmations(ws *steam.WebSession, steamID uint64, deviceID, confirmati
 // accept 为 true 时允许，false 时拒绝。返回 Steam 的 success 字段。
 func HandleConfirmations(ws *steam.WebSession, steamID uint64, deviceID, confirmationHash string, time int64, confirmations []Confirmation, accept bool) (bool, error) {
 	if ws == nil {
-		return false, fmt.Errorf("Web 会话为空")
+		return false, fmt.Errorf("web 会话为空")
 	}
 	if len(confirmations) == 0 {
 		return false, fmt.Errorf("确认列表为空")
@@ -128,7 +128,7 @@ func HandleConfirmations(ws *steam.WebSession, steamID uint64, deviceID, confirm
 	if err != nil {
 		return false, fmt.Errorf("请求确认操作失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

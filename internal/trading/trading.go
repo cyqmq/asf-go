@@ -86,7 +86,7 @@ func GetTradeOffers(apiKey string, activeOnly bool) ([]TradeOffer, []TradeOffer,
 	if err != nil {
 		return nil, nil, fmt.Errorf("请求交易报价失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, nil, fmt.Errorf("交易报价接口返回状态码 %d: %s", resp.StatusCode, string(body))
@@ -115,7 +115,7 @@ func CancelTradeOffer(ws *steam.WebSession, tradeOfferID uint64) error {
 
 func sendTradeOfferAction(ws *steam.WebSession, tradeOfferID uint64, action string) error {
 	if ws == nil {
-		return fmt.Errorf("Web 会话为空")
+		return fmt.Errorf("web 会话为空")
 	}
 	reqURL := fmt.Sprintf("https://steamcommunity.com/tradeoffer/%d/%s", tradeOfferID, action)
 	form := url.Values{}
@@ -132,7 +132,7 @@ func sendTradeOfferAction(ws *steam.WebSession, tradeOfferID uint64, action stri
 	if err != nil {
 		return fmt.Errorf("%s 交易报价请求失败: %w", action, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -177,7 +177,7 @@ type TradeItem struct {
 // 需要 Steam Web API Key（用于创建报价）与已初始化的 Web 会话（身份 Cookie）。
 func SendTradeOffer(ws *steam.WebSession, apiKey string, targetSteamID uint64, items []TradeItem, message string) (uint64, error) {
 	if ws == nil {
-		return 0, fmt.Errorf("Web 会话为空")
+		return 0, fmt.Errorf("web 会话为空")
 	}
 	if apiKey == "" {
 		return 0, fmt.Errorf("未配置 Steam Web API Key，无法发送交易报价")

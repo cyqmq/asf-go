@@ -1,7 +1,6 @@
 package ipc
 
 import (
-	"errors"
 	"net/http"
 )
 
@@ -34,24 +33,6 @@ func (e *APIError) Error() string {
 // NewAPIError 创建 APIError。
 func NewAPIError(status int, code ErrorCode, message string) *APIError {
 	return &APIError{Status: status, Code: code, Message: message}
-}
-
-// writeError 将错误写入响应；若是 APIError 则使用其状态码和错误码，否则按 500 处理。
-func writeError(w http.ResponseWriter, err error) {
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
-		writeJSON(w, apiErr.Status, map[string]any{
-			"Success": false,
-			"Code":    apiErr.Code,
-			"Message": apiErr.Message,
-		})
-		return
-	}
-	writeJSON(w, http.StatusInternalServerError, map[string]any{
-		"Success": false,
-		"Code":    ErrorInternal,
-		"Message": err.Error(),
-	})
 }
 
 // writeErrorCode 直接写入带错误码的错误响应。

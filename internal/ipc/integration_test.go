@@ -29,7 +29,7 @@ func TestASFUIKeyEndpoints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("请求 %s 失败: %v", path, err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("%s 状态码应为 200，得到 %d", path, resp.StatusCode)
 		}
@@ -49,7 +49,7 @@ func TestCommandsEndpointViaIPC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("状态码应为 200，得到 %d", resp.StatusCode)
 	}

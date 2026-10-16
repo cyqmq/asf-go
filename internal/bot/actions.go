@@ -22,7 +22,7 @@ func (b *Bot) Loot(targetSteamID uint64) (uint64, error) {
 	}
 	ws, err := b.steamClient.WebSession()
 	if err != nil {
-		return 0, fmt.Errorf("Web 会话不可用: %w", err)
+		return 0, fmt.Errorf("web 会话不可用: %w", err)
 	}
 	steamID := b.steamClient.SteamID()
 	if steamID == 0 {
@@ -73,7 +73,7 @@ func (b *Bot) AddLicense(identifier string) (string, error) {
 	case GameIdentifierPackage:
 		ws, err := b.steamClient.WebSession()
 		if err != nil {
-			return "", fmt.Errorf("Web 会话不可用: %w", err)
+			return "", fmt.Errorf("web 会话不可用: %w", err)
 		}
 		result, err := store.AddFreeLicense(ws, uint64(id))
 		if err != nil {
@@ -210,7 +210,7 @@ func (b *Bot) RedeemWithFlags(keys []string, flags RedeemFlags) (string, error) 
 	}
 	ws, err := b.steamClient.WebSession()
 	if err != nil {
-		return "", fmt.Errorf("Web 会话不可用: %w", err)
+		return "", fmt.Errorf("web 会话不可用: %w", err)
 	}
 
 	var lines []string
@@ -322,7 +322,7 @@ func (b *Bot) Update() (string, error) {
 		return "", fmt.Errorf("创建临时文件失败: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	if err := client.DownloadAsset(asset, tmpPath); err != nil {
 		_ = os.Remove(tmpPath)
