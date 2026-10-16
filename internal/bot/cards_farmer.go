@@ -12,6 +12,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/asf-go/asf/internal/logging"
+	"github.com/asf-go/asf/internal/steam"
 )
 
 // containsUint32 判断切片中是否包含目标值。
@@ -40,15 +41,19 @@ type CardsFarmer struct {
 	running     bool
 	stopCh      chan struct{}
 	gamesToFarm []GameInfo
+
+	// gameStartTimes 记录每个游戏首次开始挂机的时间（用于 HoursUntilCardDrops）。
+	gameStartTimes map[uint32]time.Time
 }
 
 // NewCardsFarmer 创建挂机器。
 func NewCardsFarmer(b *Bot) *CardsFarmer {
 	return &CardsFarmer{
-		bot:         b,
-		log:         b.Log,
-		stopCh:      make(chan struct{}),
-		gamesToFarm: b.loadState(),
+		bot:            b,
+		log:            b.Log,
+		stopCh:         make(chan struct{}),
+		gamesToFarm:    b.loadState(),
+		gameStartTimes: make(map[uint32]time.Time),
 	}
 }
 
@@ -156,6 +161,12 @@ func (cf *CardsFarmer) farmOnce() {
 		})
 	}
 
+	// 应用 FarmingOrders 挂机顺序
+	cf.applyFarmingOrders(games)
+
+	// 应用 HoursUntilCardDrops：超过时限仍未掉完卡牌的游戏放弃并换下一个
+	games = cf.applyHoursLimit(games)
+
 	cf.mu.Lock()
 	cf.gamesToFarm = games
 	cf.mu.Unlock()
@@ -167,12 +178,81 @@ func (cf *CardsFarmer) farmOnce() {
 		return
 	}
 
+	// 支持 CustomGamePlayedWhileFarming：用自定义游戏名替代真实挂机游戏
+	customGame := strings.TrimSpace(cf.bot.Config.CustomGamePlayedWhileFarming)
+	if customGame != "" {
+		cf.log.Info("挂机显示自定义游戏: %s", customGame)
+		cf.bot.steamClient.StartPlayingWithNames([]steam.GamePlayedEntry{{Name: customGame}})
+		return
+	}
+
 	appIDs := make([]uint64, 0, len(games))
 	for _, g := range games {
 		appIDs = append(appIDs, uint64(g.AppID))
 		cf.log.Info("挂机游戏 %s (AppID=%d, 剩余卡牌=%d)", g.Name, g.AppID, g.CardsRemaining)
 	}
 	cf.bot.steamClient.StartPlaying(appIDs)
+}
+
+// applyFarmingOrders 按 FarmingOrders 配置排序挂机游戏（Ascending/Descending，默认保持队列顺序）。
+func (cf *CardsFarmer) applyFarmingOrders(games []GameInfo) {
+	orders := cf.bot.Config.FarmingOrders
+	if len(orders) == 0 {
+		return
+	}
+	ascending := false
+	descending := false
+	for _, order := range orders {
+		switch strings.ToUpper(strings.TrimSpace(order)) {
+		case "ASCENDING":
+			ascending = true
+		case "DESCENDING":
+			descending = true
+		case "UNORDERED":
+			return
+		}
+	}
+	switch {
+	case ascending:
+		sort.SliceStable(games, func(i, j int) bool { return games[i].AppID < games[j].AppID })
+	case descending:
+		sort.SliceStable(games, func(i, j int) bool { return games[i].AppID > games[j].AppID })
+	}
+}
+
+// applyHoursLimit 应用 HoursUntilCardDrops：记录首次挂机时间，超时游戏从列表移除，返回过滤后的列表。
+func (cf *CardsFarmer) applyHoursLimit(games []GameInfo) []GameInfo {
+	limit := cf.bot.Config.HoursUntilCardDrops
+	if limit == 0 {
+		return games
+	}
+	now := time.Now()
+	filtered := make([]GameInfo, 0, len(games))
+	for _, g := range games {
+		start, ok := cf.gameStartTimes[g.AppID]
+		if !ok {
+			cf.gameStartTimes[g.AppID] = now
+			filtered = append(filtered, g)
+			continue
+		}
+		if now.Sub(start) >= time.Duration(limit)*time.Hour {
+			cf.log.Info("游戏 %s (AppID=%d) 已挂机超过 %d 小时仍无卡牌，放弃并换下一个", g.Name, g.AppID, limit)
+			delete(cf.gameStartTimes, g.AppID)
+			continue
+		}
+		filtered = append(filtered, g)
+	}
+	// 清理已不在列表中的游戏起始时间
+	active := make(map[uint32]struct{}, len(filtered))
+	for _, g := range filtered {
+		active[g.AppID] = struct{}{}
+	}
+	for appID := range cf.gameStartTimes {
+		if _, ok := active[appID]; !ok {
+			delete(cf.gameStartTimes, appID)
+		}
+	}
+	return filtered
 }
 
 // fetchGamesWithDrops 抓取卡牌页面并解析仍有掉落的游戏。

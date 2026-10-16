@@ -261,8 +261,35 @@ func (c *Client) WebSessionOrNil() *WebSession {
 
 // StartPlaying 设置游玩中的游戏（卡牌挂机）。
 func (c *Client) StartPlaying(appIDs []uint64) {
-	c.inner.GC.SetGamesPlayed(appIDs...)
-	c.log.Debug("设置游玩游戏: %v", appIDs)
+	entries := make([]GamePlayedEntry, 0, len(appIDs))
+	for _, appID := range appIDs {
+		entries = append(entries, GamePlayedEntry{AppID: appID})
+	}
+	c.StartPlayingWithNames(entries)
+}
+
+// GamePlayedEntry 描述一个正在游玩的游戏。Name 非空且 AppID 为 0 时表示非 Steam 游戏（自定义游戏名）。
+type GamePlayedEntry struct {
+	AppID uint64
+	Name  string
+}
+
+// StartPlayingWithNames 设置游玩游戏列表，支持自定义游戏名（对应原版 SetGamesPlayed）。
+func (c *Client) StartPlayingWithNames(entries []GamePlayedEntry) {
+	games := make([]*protobuf.CMsgClientGamesPlayed_GamePlayed, 0, len(entries))
+	for _, e := range entries {
+		game := &protobuf.CMsgClientGamesPlayed_GamePlayed{}
+		if e.AppID != 0 {
+			game.GameId = proto.Uint64(e.AppID)
+		}
+		if e.Name != "" {
+			game.GameExtraInfo = proto.String(e.Name)
+		}
+		games = append(games, game)
+	}
+	c.inner.Write(protocol.NewClientMsgProtobuf(steamlang.EMsg_ClientGamesPlayed, &protobuf.CMsgClientGamesPlayed{
+		GamesPlayed: games,
+	}))
 }
 
 // StopPlaying 清除游玩状态。

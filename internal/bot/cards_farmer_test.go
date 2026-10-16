@@ -1,10 +1,14 @@
 package bot
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/asf-go/asf/internal/config"
+	"github.com/asf-go/asf/internal/logging"
 )
 
 func TestParseBadgePage(t *testing.T) {
@@ -84,5 +88,83 @@ func TestParseBadgePageDeduplicates(t *testing.T) {
 	games, _ := parseBadgePage(doc, seen)
 	if len(games) != 1 {
 		t.Errorf("重复 AppID 应去重，得到 %d 个", len(games))
+	}
+}
+
+func newTestFarmer(t *testing.T, cfg *config.BotConfig) *CardsFarmer {
+	t.Helper()
+	log, err := logging.New("Bot-test", filepath.Join(t.TempDir(), "test.log"), logging.Info)
+	if err != nil {
+		t.Fatalf("创建日志失败: %v", err)
+	}
+	return &CardsFarmer{
+		bot:            &Bot{Config: cfg, Log: log},
+		log:            log,
+		gameStartTimes: make(map[uint32]time.Time),
+	}
+}
+
+func TestApplyFarmingOrdersAscending(t *testing.T) {
+	cfg := config.DefaultBotConfig()
+	cfg.FarmingOrders = []string{"Ascending"}
+	cf := newTestFarmer(t, cfg)
+	games := []GameInfo{
+		{AppID: 730, Name: "CS2", CardsRemaining: 2},
+		{AppID: 570, Name: "Dota2", CardsRemaining: 5},
+		{AppID: 440, Name: "TF2", CardsRemaining: 1},
+	}
+	cf.applyFarmingOrders(games)
+	if games[0].AppID != 440 || games[1].AppID != 570 || games[2].AppID != 730 {
+		t.Errorf("Ascending 排序错误: %v", games)
+	}
+}
+
+func TestApplyFarmingOrdersDescending(t *testing.T) {
+	cfg := config.DefaultBotConfig()
+	cfg.FarmingOrders = []string{"Descending"}
+	cf := newTestFarmer(t, cfg)
+	games := []GameInfo{
+		{AppID: 730, Name: "CS2", CardsRemaining: 2},
+		{AppID: 570, Name: "Dota2", CardsRemaining: 5},
+	}
+	cf.applyFarmingOrders(games)
+	if games[0].AppID != 730 || games[1].AppID != 570 {
+		t.Errorf("Descending 排序错误: %v", games)
+	}
+}
+
+func TestApplyFarmingOrdersUnorderedKeepsOrder(t *testing.T) {
+	cfg := config.DefaultBotConfig()
+	cfg.FarmingOrders = []string{"Unordered"}
+	cf := newTestFarmer(t, cfg)
+	games := []GameInfo{
+		{AppID: 730, Name: "CS2", CardsRemaining: 2},
+		{AppID: 570, Name: "Dota2", CardsRemaining: 5},
+	}
+	original := []GameInfo{games[0], games[1]}
+	cf.applyFarmingOrders(games)
+	if games[0] != original[0] || games[1] != original[1] {
+		t.Errorf("Unordered 应保持原顺序: %v", games)
+	}
+}
+
+func TestApplyHoursLimit(t *testing.T) {
+	cfg := config.DefaultBotConfig()
+	cfg.HoursUntilCardDrops = 1
+	cf := newTestFarmer(t, cfg)
+	// 570 两小时前开始（应被过滤），440 刚加入（保留）
+	cf.gameStartTimes[570] = time.Now().Add(-2 * time.Hour)
+	games := []GameInfo{
+		{AppID: 570, Name: "Dota2", CardsRemaining: 5},
+		{AppID: 440, Name: "TF2", CardsRemaining: 1},
+	}
+	games = cf.applyHoursLimit(games)
+	if len(games) != 1 || games[0].AppID != 440 {
+		t.Errorf("超时游戏应被过滤，实际: %v", games)
+	}
+	// 再次调用：440 现在有了开始时间，仍然保留
+	games = cf.applyHoursLimit(games)
+	if len(games) != 1 || games[0].AppID != 440 {
+		t.Errorf("新游戏应保留，实际: %v", games)
 	}
 }
