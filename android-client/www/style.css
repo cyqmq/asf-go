@@ -395,10 +395,14 @@ body {
 
 /* ═══ 设置（复刻 config_page） ═══ */
 .config-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 20px 12px;
+  padding: calc(env(safe-area-inset-top) + 12px) 20px 12px;
+  background: var(--primary);
 }
 .top-actions { display: flex; gap: 8px; align-items: center; }
 .about-btn {

@@ -214,7 +214,7 @@
                 <span class="summary-chip">离线 <b id="sum-offline">0</b></span>
               </div>
 
-              <button class="btn-secondary filled add-bot" onclick="toastMsg('新建机器人需在服务器端创建配置文件')">添加机器人</button>
+              <button class="btn-secondary filled add-bot" onclick="showAddBot()">添加机器人</button>
             </div>
           </div>
         </section>
@@ -274,6 +274,10 @@
 
             <div class="section-label">常规</div>
             <div class="toggle-row">
+              <span>公共模式（允许外部访问本地服务）</span>
+              <label class="switch"><input type="checkbox" id="public-mode" onchange="togglePublicMode(this)"><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row">
               <span>自动接受好友报价</span>
               <label class="switch"><input type="checkbox" checked onchange="logToggle(this,'自动接受好友报价')"><span class="slider"></span></label>
             </div>
@@ -316,6 +320,22 @@
         </button>
       </nav>
   </main>
+
+  <!-- 添加机器人弹窗 -->
+  <div class="modal-mask hidden" id="addbot-modal" onclick="if(event.target===this)hideAddBot()">
+    <div class="modal">
+      <h2>添加机器人</h2>
+      <p class="dim">输入机器人名称，将调用 asf-go IPC 创建新 Bot 配置。</p>
+      <div class="field" style="margin-top:14px">
+        <label>机器人名称</label>
+        <input type="text" id="new-bot-name" placeholder="例如：mainbot">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="hideAddBot()">取消</button>
+        <button class="btn-secondary filled" onclick="confirmAddBot()">创建</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 关于弹窗 -->
   <div class="modal-mask hidden" id="about-modal" onclick="if(event.target===this)hideAbout()">

@@ -22,10 +22,12 @@
 
   /* ─── 服务器配置 ─── */
   function getSettings() {
+    var pm = document.getElementById("public-mode");
     return {
       host: (document.getElementById("server-host") || {}).value || "127.0.0.1",
       port: (document.getElementById("server-port") || {}).value || "1242",
-      password: (document.getElementById("server-password") || {}).value || ""
+      password: (document.getElementById("server-password") || {}).value || "",
+      publicMode: pm ? pm.checked : false
     };
   }
   function getBase() {
@@ -39,6 +41,7 @@
   window.saveSettings = function () {
     try {
       localStorage.setItem("asfgo-server", JSON.stringify(getSettings()));
+      applyPublicMode();
       toastMsg("配置已保存");
       addLog("INFO", "服务器配置已保存");
     } catch (e) {
@@ -54,8 +57,28 @@
       if (document.getElementById("server-host")) document.getElementById("server-host").value = s.host || "127.0.0.1";
       if (document.getElementById("server-port")) document.getElementById("server-port").value = s.port || "1242";
       if (document.getElementById("server-password")) document.getElementById("server-password").value = s.password || "";
+      var pm = document.getElementById("public-mode");
+      if (pm) pm.checked = !!s.publicMode;
+      applyPublicMode();
     } catch (e) { /* 忽略损坏配置 */ }
   }
+
+  /* 公共模式：开启后地址栏禁用（固定连接本地 127.0.0.1），服务监听 0.0.0.0 允许外部访问 */
+  function applyPublicMode() {
+    var pm = document.getElementById("public-mode");
+    var host = document.getElementById("server-host");
+    if (!pm || !host) return;
+    host.disabled = pm.checked;
+    if (pm.checked) {
+      host.value = "127.0.0.1";
+    }
+  }
+
+  window.togglePublicMode = function (el) {
+    applyPublicMode();
+    saveSettings();
+    toastMsg(el.checked ? "公共模式已开启：服务将允许外部访问" : "公共模式已关闭");
+  };
 
   /* ─── IPC 请求 ─── */
   async function fetchAsf(path, options) {
@@ -91,7 +114,7 @@
     if (!hasNativePlugin()) return false;
     try {
       var pass = getSettings().password || "testpass";
-      await window.Capacitor.Plugins.AsfGo.start({ password: pass });
+      await window.Capacitor.Plugins.AsfGo.start({ password: pass, public: getSettings().publicMode });
       addLog("INFO", "已启动内置 asf-go 服务端 (127.0.0.1:1242)");
       return true;
     } catch (e) {
@@ -378,6 +401,51 @@
   };
   window.hideAbout = function () {
     document.getElementById("about-modal").classList.add("hidden");
+  };
+
+  /* ─── 添加机器人 ─── */
+  window.showAddBot = function () {
+    document.getElementById("addbot-modal").classList.remove("hidden");
+    var input = document.getElementById("new-bot-name");
+    if (input) input.focus();
+  };
+  window.hideAddBot = function () {
+    document.getElementById("addbot-modal").classList.add("hidden");
+  };
+  window.confirmAddBot = async function () {
+    var input = document.getElementById("new-bot-name");
+    var name = input ? input.value.trim() : "";
+    if (!name) { toastMsg("请输入机器人名称"); return; }
+    if (!serviceRunning) { toastMsg("请先启动服务"); return; }
+    try {
+      var data = await fetchAsf("/api/bot/" + encodeURIComponent(name), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          botConfig: {
+            Enabled: true,
+            SteamLogin: "",
+            SteamPassword: "",
+            SteamUserPermissions: {},
+            OnlineStatus: "Online",
+            RemoteCommunication: "All",
+            PasswordFormat: "PlainText",
+            Trading: true
+          }
+        })
+      });
+      if (data.Success) {
+        toastMsg("已创建机器人 " + name);
+        addLog("INFO", "已创建机器人 " + name);
+        if (input) input.value = "";
+        hideAddBot();
+        refreshStatus();
+      } else {
+        toastMsg("创建失败: " + (data.Message || "未知错误"));
+      }
+    } catch (e) {
+      toastMsg("创建失败: " + e.message);
+    }
   };
 
   /* ─── Toast ─── */

@@ -39,7 +39,8 @@ cd android && ./gradlew assembleDebug
   - `POST /api/command`：命令控制台真实执行命令。
   - `Authentication: <IPC 密码>` 头（与 ASF-ui 相同认证方式）。
 - 连接失败自动进入**演示模式**。
-- 设置页可保存服务器地址/端口/IPC 密码（localStorage；内置服务默认 127.0.0.1:1242/testpass）。
+- 设置页可保存服务器地址/端口/IPC 密码/公共模式（localStorage；内置服务默认 127.0.0.1:1242/testpass）。公共模式开启后 asf-go 以 `--ipc-addr 0.0.0.0:1242` 启动（允许外部访问），地址栏禁用。
+- 机器人管理页「添加机器人」弹窗：调用 `POST /api/bot/{name}` 创建新 Bot 配置。
 - Android 已允许 cleartext HTTP（`android:usesCleartextTraffic="true"`），`androidScheme` 设为 `http`。
 
 ## CI 构建

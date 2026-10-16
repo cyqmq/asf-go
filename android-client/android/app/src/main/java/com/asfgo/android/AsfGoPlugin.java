@@ -149,6 +149,7 @@ public class AsfGoPlugin extends Plugin {
     public void start(PluginCall call) {
         try {
             String password = call.getString("password", "testpass");
+            boolean isPublic = call.getBoolean("public", false);
             File bin = ensureBinary();
             ensureConfig(password);
             if (process != null && process.isAlive()) {
@@ -156,10 +157,11 @@ public class AsfGoPlugin extends Plugin {
                 return;
             }
             selfTest(bin);
+            String ipcAddr = isPublic ? "0.0.0.0:1242" : "127.0.0.1:1242";
             ProcessBuilder pb = new ProcessBuilder(
                     bin.getAbsolutePath(),
                     "--config", configDir().getAbsolutePath(),
-                    "--ipc-addr", "127.0.0.1:1242"
+                    "--ipc-addr", ipcAddr
             );
             pb.redirectErrorStream(true);
             pb.redirectOutput(logFile());
