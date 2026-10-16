@@ -34,7 +34,7 @@ type Client struct {
 	accessToken string
 
 	onLoginKey      func(string)
-	onChatMessage   func(chatterID uint64, message string)
+	onChatMessage   func(chatterID uint64, message string, chatRoomID uint64)
 	onFriendRequest func(friendID uint64)
 	onChatInvite    func(inviterID uint64, chatRoomID uint64, roomName string)
 	onDisconnect    func()
@@ -80,8 +80,8 @@ func (c *Client) SetOnLoginKey(fn func(string)) {
 	c.onLoginKey = fn
 }
 
-// SetOnChatMessage 注册聊天消息回调（用于命令处理）。
-func (c *Client) SetOnChatMessage(fn func(chatterID uint64, message string)) {
+// SetOnChatMessage 注册聊天消息回调（用于命令处理）。chatRoomID 为 0 表示私聊，非零表示群聊。
+func (c *Client) SetOnChatMessage(fn func(chatterID uint64, message string, chatRoomID uint64)) {
 	c.onChatMessage = fn
 }
 
@@ -190,7 +190,7 @@ func (c *Client) eventLoop() {
 
 			case *steam.ChatMsgEvent:
 				if ev.IsMessage() && c.onChatMessage != nil {
-					c.onChatMessage(uint64(ev.ChatterId), ev.Message)
+					c.onChatMessage(uint64(ev.ChatterId), ev.Message, uint64(ev.ChatRoomId))
 				}
 
 			case *steam.FriendStateEvent:
@@ -314,6 +314,12 @@ func (c *Client) StopPlaying() {
 func (c *Client) SendChatMessage(to uint64, message string) {
 	c.inner.Social.SendMessage(steamid.SteamId(to), steamlang.EChatEntryType_ChatMsg, message)
 	c.log.Debug("向 %d 发送消息: %s", to, message)
+}
+
+// SendChatMessageToRoom 向群聊房间发送消息。
+func (c *Client) SendChatMessageToRoom(roomID uint64, message string) {
+	c.inner.Social.SendMessage(steamid.SteamId(roomID), steamlang.EChatEntryType_ChatMsg, message)
+	c.log.Debug("向聊天室 %d 发送消息: %s", roomID, message)
 }
 
 // SetPersonaName 修改 Steam 昵称。

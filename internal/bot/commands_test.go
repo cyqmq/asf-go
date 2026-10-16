@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/asf-go/asf/internal/config"
 	"github.com/asf-go/asf/internal/logging"
@@ -421,4 +422,86 @@ func TestCheckSteamProtocolsWebSocketWarns(t *testing.T) {
 	gc.SteamProtocols = "WebSocket"
 	b.GlobalConfig = gc
 	b.checkSteamProtocols() // 不应 panic
+}
+
+func TestCommandHelpWithCommand(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!help status")
+	if !strings.Contains(reply, "status") || !strings.Contains(reply, "挂机进度") {
+		t.Errorf("!help status 应返回详细用法，实际: %q", reply)
+	}
+	reply = b.handleCommandText(76561198000000001, "!help nonexistent")
+	if !strings.Contains(reply, "未知命令") {
+		t.Errorf("!help 未知命令应提示，实际: %q", reply)
+	}
+}
+
+func TestStripGroupTarget(t *testing.T) {
+	prefix := "!"
+	botName := "testbot"
+	cases := []struct {
+		msg      string
+		expected string
+	}{
+		{"!testbot status", "!status"},
+		{"!TESTBOT status", "!status"},
+		{"!all status", "!status"},
+		{"!other status", ""},
+		{"!status", ""},
+		{"!testbot", ""},
+		{"!testbot pause 2h", "!pause 2h"},
+	}
+	for _, c := range cases {
+		got := stripGroupTarget(c.msg, prefix, botName)
+		if got != c.expected {
+			t.Errorf("stripGroupTarget(%q) = %q，期望 %q", c.msg, got, c.expected)
+		}
+	}
+}
+
+func TestCommandBatchFromFile(t *testing.T) {
+	b := newCommandTestBot(t)
+	bgrFile := filepath.Join(b.configDir, b.Name+".games-to-redeem-in-background")
+	if err := os.WriteFile(bgrFile, []byte("AAAAA-BBBBB-CCCCC\n"), 0o600); err != nil {
+		t.Fatalf("写入后台文件失败: %v", err)
+	}
+	reply := b.handleCommandText(76561198000000001, "!batch")
+	if !strings.Contains(reply, "尚未登录") {
+		t.Errorf("未登录时 !batch 应提示未登录，实际: %q", reply)
+	}
+	if !strings.Contains(reply, "后台列表已保留") {
+		t.Errorf("失败时后台列表应保留，实际: %q", reply)
+	}
+	data, _ := os.ReadFile(bgrFile)
+	if len(strings.TrimSpace(string(data))) == 0 {
+		t.Errorf("兑换失败时后台列表不应清空")
+	}
+}
+
+func TestCommandBatchEmptyFile(t *testing.T) {
+	b := newCommandTestBot(t)
+	reply := b.handleCommandText(76561198000000001, "!batch")
+	if !strings.Contains(reply, "后台兑换列表为空") {
+		t.Errorf("空列表应提示，实际: %q", reply)
+	}
+}
+
+func TestStatusTextWithProgress(t *testing.T) {
+	b := newCommandTestBot(t)
+	next := time.Now().Add(5 * time.Minute)
+	b.cardsFarmer = &CardsFarmer{
+		bot:         b,
+		log:         b.Log,
+		nextCheckAt: next,
+		gamesToFarm: []GameInfo{
+			{AppID: 730, Name: "CS2", CardsRemaining: 2, TotalCards: 5},
+		},
+	}
+	text := b.statusText()
+	if !strings.Contains(text, "已掉落 3/5，60%") {
+		t.Errorf("statusText 应包含挂机进度，实际: %q", text)
+	}
+	if !strings.Contains(text, "下次检查:") {
+		t.Errorf("statusText 应包含下次检查时间，实际: %q", text)
+	}
 }

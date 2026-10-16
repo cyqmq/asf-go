@@ -28,18 +28,51 @@ func (b *Bot) checkAccess(chatterID uint64, min config.Access) bool {
 }
 
 // handleCommand 处理 Steam 聊天命令（以 CommandPrefix 开头）。
+// chatRoomID 为 0 表示私聊，非零表示群聊（群聊需要 bot 名或 !all 寻址）。
 
-func (b *Bot) handleCommand(chatterID uint64, message string) {
+func (b *Bot) handleCommand(chatterID uint64, message string, chatRoomID uint64) {
 	if !b.remoteCommunicationAllowsSteam() {
 		return
+	}
+	if chatRoomID != 0 {
+		command := stripGroupTarget(message, b.CommandPrefix, b.Name)
+		if command == "" {
+			return
+		}
+		message = command
 	}
 	reply := b.handleCommandText(chatterID, message)
 	if b.steamClient != nil {
 		if prefix := b.messagePrefix(); prefix != "" {
 			reply = prefix + reply
 		}
-		b.steamClient.SendChatMessage(chatterID, reply)
+		if chatRoomID != 0 {
+			b.steamClient.SendChatMessageToRoom(chatRoomID, reply)
+		} else {
+			b.steamClient.SendChatMessage(chatterID, reply)
+		}
 	}
+}
+
+// stripGroupTarget 解析群聊命令寻址：消息形如 "!<botname> <command>" 或 "!<all> <command>"。
+// 目标匹配时返回去掉寻址前缀后的命令（保持原前缀），否则返回空字符串。
+func stripGroupTarget(message, prefix, botName string) string {
+	if prefix == "" {
+		prefix = "!"
+	}
+	if !strings.HasPrefix(message, prefix) {
+		return ""
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(message, prefix))
+	fields := strings.Fields(rest)
+	if len(fields) < 2 {
+		return ""
+	}
+	target := strings.ToLower(fields[0])
+	if target != "all" && target != strings.ToLower(botName) {
+		return ""
+	}
+	return prefix + strings.Join(fields[1:], " ")
 }
 
 // messagePrefix 返回 Steam 消息前缀（GlobalConfig.SteamMessagePrefix，如 "/me "）。
@@ -89,8 +122,17 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 	var reply string
 
 	switch {
-	case lower == "help":
-		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, 2faok, 2fano, mafile, password, keys, batch <key...>, inventory, play <appid...>, input <code>, privacy <settings...>, bgr <key>, bgrc, bgrm <key>, bgrclear, hash <text>, encrypt <text>, reset, mab, mabadd <appid...>, mabrm <appid...|all>, fb <fbadd/fbrm>, fq <fqadd/fqrm>, loot <SteamID64>, transfer <BotName>, closetrades, nickname <name>, addlicense <sub/xxx>, checkappbeta <appid> <password>, owns <appid>, redeem <key> [flags], level, points, stats, version, update, exit, help"
+	case lower == "help" || strings.HasPrefix(lower, "help "):
+		arg := strings.TrimSpace(command[len("help"):])
+		if arg != "" {
+			if usage, ok := commandHelp[strings.ToLower(arg)]; ok {
+				reply = fmt.Sprintf("%s: %s", arg, usage)
+			} else {
+				reply = fmt.Sprintf("未知命令 %q。发送 !help 查看全部命令。", arg)
+			}
+			break
+		}
+		reply = "可用命令: status, pause, resume, farm, restart, unpack, 2fa, 2faok, 2fano, mafile, password, keys, batch, inventory, play, input, privacy, bgr, bgrm, bgrclear, hash, encrypt, reset, mab, mabadd, mabrm, fb, fbadd, fbrm, fq, fqadd, fqrm, loot, transfer, closetrades, nickname, addlicense, checkappbeta, owns, redeem, level, points, stats, version, update, exit, help\n发送 !help <命令> 查看单个命令用法。"
 	case lower == "status":
 		if !b.checkAccess(chatterID, config.AccessOperator) {
 			reply = "权限不足"
@@ -255,7 +297,26 @@ func (b *Bot) handleCommandText(chatterID uint64, message string) string {
 		}
 		keysList := strings.Fields(command[len("batch"):])
 		if len(keysList) == 0 {
-			reply = "用法: batch <CDKey...>"
+			// 无参数：从后台兑换列表加载并批量兑换
+			bgrFile := filepath.Join(b.configDir, b.Name+".games-to-redeem-in-background")
+			data, err := os.ReadFile(bgrFile)
+			if err != nil {
+				reply = "后台兑换列表为空。用法: batch <CDKey...>，或先用 !bgr <key> 添加"
+				break
+			}
+			keysList = strings.Fields(string(data))
+			if len(keysList) == 0 {
+				reply = "后台兑换列表为空。用法: batch <CDKey...>，或先用 !bgr <key> 添加"
+				break
+			}
+			resp, err := b.Redeem(keysList)
+			if err != nil {
+				reply = fmt.Sprintf("批量兑换失败: %v（后台列表已保留）", err)
+				break
+			}
+			// 兑换成功后清空后台列表
+			_ = os.WriteFile(bgrFile, nil, 0o600)
+			reply = resp + fmt.Sprintf("（已从后台兑换列表加载 %d 个 key 并清空）", len(keysList))
 			break
 		}
 		reply, _ = b.Redeem(keysList)
@@ -866,7 +927,24 @@ func (b *Bot) statusText() string {
 	} else {
 		text += fmt.Sprintf(" | 挂机游戏 %d 个", len(games))
 		for _, g := range games {
-			text += fmt.Sprintf(" | %s(%d):%d", g.Name, g.AppID, g.CardsRemaining)
+			progress := ""
+			if g.TotalCards > 0 {
+				dropped := g.TotalCards - g.CardsRemaining
+				if dropped < 0 {
+					dropped = 0
+				}
+				pct := 0
+				if g.TotalCards > 0 {
+					pct = dropped * 100 / g.TotalCards
+				}
+				progress = fmt.Sprintf("（已掉落 %d/%d，%d%%）", dropped, g.TotalCards, pct)
+			}
+			text += fmt.Sprintf(" | %s(%d):剩余 %d 张%s", g.Name, g.AppID, g.CardsRemaining, progress)
+		}
+	}
+	if b.cardsFarmer != nil {
+		if next := b.cardsFarmer.NextCheckAt(); !next.IsZero() {
+			text += fmt.Sprintf(" | 下次检查: %s", next.Local().Format("15:04:05"))
 		}
 	}
 	return text
@@ -920,4 +998,55 @@ func parseAppIDs(text string) ([]uint32, error) {
 		appIDs = append(appIDs, uint32(v))
 	}
 	return appIDs, nil
+}
+
+// commandHelp 记录每个命令的详细用法（!help <命令> 时展示）。
+var commandHelp = map[string]string{
+	"status":       "查看本机器人的连接状态与挂机进度",
+	"pause":        "暂停卡牌挂机（!pause~ 永久暂停）",
+	"resume":       "恢复卡牌挂机",
+	"farm":         "立即重新检查并开始挂机",
+	"restart":      "重启本机器人",
+	"unpack":       "打开库存中所有补充包",
+	"2fa":          "显示当前 Steam 2FA 代码",
+	"2faok":        "接受全部待确认的 Steam 确认项",
+	"2fano":        "拒绝全部待确认的 Steam 确认项",
+	"mafile":       "显示移动令牌文件（.maFile）内容",
+	"password":     "修改 Steam 密码: !password <新密码>",
+	"keys":         "查看后台兑换列表中的密钥",
+	"batch":        "立即批量兑换: !batch <key...>；无参数时从后台兑换列表加载并兑换",
+	"inventory":    "查看库存: !inventory",
+	"play":         "设置游玩游戏: !play <appid...>（留空清除）",
+	"input":        "提交 Steam Guard/2FA 验证码: !input <code>",
+	"privacy":      "修改隐私: !privacy <profile> [ownedGames] [playtime] [friendsList] [inventory] [inventoryGifts] [comments]，1=私密 2=好友 3=公开",
+	"bgr":          "添加密钥到后台兑换列表: !bgr <key>",
+	"bgrm":         "从后台兑换列表移除: !bgrm <key>",
+	"bgrclear":     "清空后台兑换列表",
+	"hash":         "计算 SCrypt 哈希（IPC 密码格式）: !hash <text>",
+	"encrypt":      "AES 加密文本: !encrypt <text>",
+	"reset":        "重置登录 Key 并重新登录",
+	"mab":          "查看主动匹配黑名单",
+	"mabadd":       "添加主动匹配黑名单: !mabadd <appid[,appid...]>",
+	"mabrm":        "移除主动匹配黑名单: !mabrm <appid[,appid...]|all>",
+	"fb":           "查看挂机黑名单",
+	"fbadd":        "添加挂机黑名单: !fbadd <appid>",
+	"fbrm":         "移除挂机黑名单: !fbrm <appid|all>",
+	"fq":           "查看挂机队列",
+	"fqadd":        "添加挂机队列: !fqadd <appid>",
+	"fqrm":         "移除挂机队列: !fqrm <appid|all>",
+	"loot":         "把可转移物品发给指定用户: !loot <SteamID64>",
+	"transfer":     "把可转移物品转给另一个机器人: !transfer <BotName>",
+	"closetrades":  "关闭所有进行中的交易报价",
+	"nickname":     "修改 Steam 昵称: !nickname <名称>",
+	"addlicense":   "添加免费许可证: !addlicense <sub/xxx>",
+	"checkappbeta": "检查应用测试版密码: !checkappbeta <appid> <password>",
+	"owns":         "检查是否拥有应用: !owns <appid>",
+	"redeem":       "兑换激活码: !redeem <key> [flags]，flags: ff/fawk/fd/fkmg/sawk/sd/sf/si/skmg/v",
+	"level":        "查询 Steam 等级",
+	"points":       "查询 Steam 积分余额",
+	"stats":        "查看机器人统计信息",
+	"version":      "显示 ASF Go 版本",
+	"update":       "检查并应用 ASF Go 更新",
+	"exit":         "退出 ASF（仅 Owner）",
+	"help":         "显示帮助: !help [命令]",
 }

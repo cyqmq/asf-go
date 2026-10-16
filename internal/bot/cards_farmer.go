@@ -30,6 +30,7 @@ type GameInfo struct {
 	AppID          uint32
 	Name           string
 	CardsRemaining int
+	TotalCards     int
 }
 
 // CardsFarmer 负责卡牌掉落挂机。
@@ -44,6 +45,9 @@ type CardsFarmer struct {
 
 	// gameStartTimes 记录每个游戏首次开始挂机的时间（用于 HoursUntilCardDrops）。
 	gameStartTimes map[uint32]time.Time
+
+	// nextCheckAt 记录下一次挂机检查的时间（供 !status 展示）。
+	nextCheckAt time.Time
 }
 
 // NewCardsFarmer 创建挂机器。
@@ -125,6 +129,9 @@ func (cf *CardsFarmer) loop() {
 				delay = blockDelay
 			}
 		}
+		cf.mu.Lock()
+		cf.nextCheckAt = time.Now().Add(delay)
+		cf.mu.Unlock()
 
 		select {
 		case <-stopCh:
@@ -132,6 +139,13 @@ func (cf *CardsFarmer) loop() {
 		case <-time.After(delay):
 		}
 	}
+}
+
+// NextCheckAt 返回下一次挂机检查的时间（零值表示尚未计划）。
+func (cf *CardsFarmer) NextCheckAt() time.Time {
+	cf.mu.Lock()
+	defer cf.mu.Unlock()
+	return cf.nextCheckAt
 }
 
 // farmResult 表示一轮挂机的结果。
@@ -366,14 +380,19 @@ func parseBadgePage(doc *goquery.Document, seen map[uint32]bool) ([]GameInfo, in
 			return
 		}
 
-		// 剩余卡牌数：span.progress_info_bold 中的数字
+		// 剩余卡牌数：span.progress_info_bold 中的数字（如 "3 of 5 cards"、"No drops remaining"、"1 card"）
 		progress := row.Find("span[class='progress_info_bold']").First().Text()
 		cardsRemaining := 0
-		for _, ch := range progress {
-			if ch >= '0' && ch <= '9' {
-				digits := extractDigits(progress)
-				cardsRemaining, _ = strconv.Atoi(digits)
-				break
+		totalCards := 0
+		digits := extractDigits(progress)
+		if digits != "" {
+			cardsRemaining, _ = strconv.Atoi(digits)
+		}
+		// 总卡牌数：解析 "X of Y cards" 中 "of" 之后的数字
+		if idx := strings.Index(strings.ToLower(progress), " of "); idx >= 0 {
+			totalDigits := extractDigits(progress[idx+4:])
+			if totalDigits != "" {
+				totalCards, _ = strconv.Atoi(totalDigits)
 			}
 		}
 		if cardsRemaining == 0 {
@@ -393,7 +412,7 @@ func parseBadgePage(doc *goquery.Document, seen map[uint32]bool) ([]GameInfo, in
 		}
 
 		seen[appID32] = true
-		games = append(games, GameInfo{AppID: appID32, Name: name, CardsRemaining: cardsRemaining})
+		games = append(games, GameInfo{AppID: appID32, Name: name, CardsRemaining: cardsRemaining, TotalCards: totalCards})
 	})
 
 	return games, rowCount
