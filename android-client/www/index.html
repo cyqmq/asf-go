@@ -323,13 +323,99 @@
 
   <!-- 添加机器人弹窗 -->
   <div class="modal-mask hidden" id="addbot-modal" onclick="if(event.target===this)hideAddBot()">
-    <div class="modal">
+    <div class="modal modal-lg">
       <h2>添加机器人</h2>
-      <p class="dim">输入机器人名称，将调用 asf-go IPC 创建新 Bot 配置。</p>
+      <p class="dim">填写机器人配置，将调用 asf-go IPC 创建新 Bot。</p>
+
       <div class="field" style="margin-top:14px">
         <label>机器人名称</label>
         <input type="text" id="new-bot-name" placeholder="例如：mainbot">
       </div>
+
+      <div class="section-label">基础设置</div>
+      <div class="toggle-row">
+        <span>启用机器人</span>
+        <label class="switch"><input type="checkbox" id="cfg-enabled" checked><span class="slider"></span></label>
+      </div>
+      <div class="field">
+        <label>Steam 账号</label>
+        <input type="text" id="cfg-login" placeholder="留空使用 QR 扫码登录">
+      </div>
+      <div class="field">
+        <label>Steam 密码</label>
+        <input type="password" id="cfg-password" placeholder="留空则不设置">
+      </div>
+      <div class="field">
+        <label>在线状态</label>
+        <select id="cfg-online-status">
+          <option value="Online">在线</option>
+          <option value="Offline">离线</option>
+          <option value="Invisible">隐身</option>
+          <option value="Busy">忙碌</option>
+          <option value="Away">离开</option>
+          <option value="Snooze">打盹</option>
+          <option value="LookingToTrade">想交易</option>
+          <option value="LookingToPlay">想玩</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>远程通信</label>
+        <select id="cfg-remote-comm">
+          <option value="All">全部</option>
+          <option value="SteamGroup">仅 Steam 群</option>
+          <option value="PublicListing">仅公开列表</option>
+          <option value="None">禁用</option>
+        </select>
+      </div>
+
+      <div class="section-label">挂机设置</div>
+      <div class="field">
+        <label>卡牌掉落等待小时数（HoursUntilCardDrops）</label>
+        <input type="number" id="cfg-hours" value="3" min="0" max="24">
+      </div>
+      <div class="field">
+        <label>挂机时自定义游戏名（可选）</label>
+        <input type="text" id="cfg-custom-game" placeholder="例如：正在游玩...">
+      </div>
+
+      <div class="section-label">交易设置</div>
+      <div class="toggle-row">
+        <span>启用交易模块</span>
+        <label class="switch"><input type="checkbox" id="cfg-trading" checked><span class="slider"></span></label>
+      </div>
+      <div class="field">
+        <label>交易等级限制（TradingSteamLevel）</label>
+        <input type="number" id="cfg-trading-level" value="5" min="0" max="100">
+      </div>
+      <div class="field">
+        <label>报价检查周期分钟（TradeCheckPeriod）</label>
+        <input type="number" id="cfg-trade-check" value="60" min="1" max="1440">
+      </div>
+      <div class="field">
+        <label>交易偏好</label>
+        <select id="cfg-trading-prefs">
+          <option value="0">无</option>
+          <option value="1">接受全部</option>
+          <option value="16">被动（仅接收）</option>
+          <option value="128">主动发送</option>
+          <option value="256">Steam 交易匹配</option>
+        </select>
+      </div>
+
+      <div class="section-label">安全设置</div>
+      <div class="field">
+        <label>家庭监护 PIN（SteamParentalCode）</label>
+        <input type="text" id="cfg-parental" placeholder="留空不设置">
+      </div>
+      <div class="field">
+        <label>Steam 主群组 ID（SteamMasterClanID）</label>
+        <input type="text" id="cfg-clan" placeholder="0">
+      </div>
+      <div class="toggle-row">
+        <span>使用登录密钥（UseLoginKeys）</span>
+        <label class="switch"><input type="checkbox" id="cfg-use-login-keys" checked><span class="slider"></span></label>
+      </div>
+
       <div class="modal-actions">
         <button class="btn-secondary" onclick="hideAddBot()">取消</button>
         <button class="btn-secondary filled" onclick="confirmAddBot()">创建</button>

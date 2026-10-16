@@ -188,6 +188,34 @@ public class AsfGoPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getLocalIp(PluginCall call) {
+        String ip = "";
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> nis = java.net.NetworkInterface.getNetworkInterfaces();
+            while (nis.hasMoreElements()) {
+                java.net.NetworkInterface ni = nis.nextElement();
+                if (!ni.isUp() || ni.isLoopback()) {
+                    continue;
+                }
+                java.util.Enumeration<java.net.InetAddress> addrs = ni.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    java.net.InetAddress a = addrs.nextElement();
+                    if (a instanceof java.net.Inet4Address) {
+                        ip = a.getHostAddress();
+                        break;
+                    }
+                }
+                if (!ip.isEmpty()) {
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            // 忽略，返回空字符串
+        }
+        call.resolve(new JSObject().put("ip", ip));
+    }
+
+    @PluginMethod
     public void getLog(PluginCall call) {
         try {
             String text = "";

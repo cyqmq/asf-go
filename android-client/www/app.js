@@ -158,6 +158,7 @@
     if (ok) {
       serviceRunning = true;
       updateServiceUI();
+      updateEndpoint();
       if (localStarted) {
         addLog("INFO", "内置 asf-go 服务端就绪，IPC 连接成功");
       } else {
@@ -412,27 +413,43 @@
   window.hideAddBot = function () {
     document.getElementById("addbot-modal").classList.add("hidden");
   };
+  function val(id) {
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : "";
+  }
+  function checked(id) {
+    var el = document.getElementById(id);
+    return el ? el.checked : false;
+  }
+
   window.confirmAddBot = async function () {
     var input = document.getElementById("new-bot-name");
     var name = input ? input.value.trim() : "";
     if (!name) { toastMsg("请输入机器人名称"); return; }
     if (!serviceRunning) { toastMsg("请先启动服务"); return; }
+    var botConfig = {
+      Enabled: checked("cfg-enabled"),
+      SteamLogin: val("cfg-login"),
+      SteamPassword: val("cfg-password"),
+      SteamUserPermissions: {},
+      OnlineStatus: val("cfg-online-status") || "Online",
+      RemoteCommunication: val("cfg-remote-comm") || "All",
+      PasswordFormat: "PlainText",
+      HoursUntilCardDrops: parseInt(val("cfg-hours") || "3", 10),
+      CustomGamePlayedWhileFarming: val("cfg-custom-game"),
+      Trading: checked("cfg-trading"),
+      TradingSteamLevel: parseInt(val("cfg-trading-level") || "5", 10),
+      TradeCheckPeriod: parseInt(val("cfg-trade-check") || "60", 10),
+      TradingPreferences: parseInt(val("cfg-trading-prefs") || "0", 10),
+      SteamParentalCode: val("cfg-parental"),
+      SteamMasterClanID: parseInt(val("cfg-clan") || "0", 10) || 0,
+      UseLoginKeys: checked("cfg-use-login-keys")
+    };
     try {
       var data = await fetchAsf("/api/bot/" + encodeURIComponent(name), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          botConfig: {
-            Enabled: true,
-            SteamLogin: "",
-            SteamPassword: "",
-            SteamUserPermissions: {},
-            OnlineStatus: "Online",
-            RemoteCommunication: "All",
-            PasswordFormat: "PlainText",
-            Trading: true
-          }
-        })
+        body: JSON.stringify({ botConfig: botConfig })
       });
       if (data.Success) {
         toastMsg("已创建机器人 " + name);
@@ -447,6 +464,20 @@
       toastMsg("创建失败: " + e.message);
     }
   };
+
+  /* 公共模式下显示设备局域网 IP */
+  async function updateEndpoint() {
+    var el = document.getElementById("endpoint-url");
+    if (!el) return;
+    if (getSettings().publicMode && hasNativePlugin()) {
+      try {
+        var res = await window.Capacitor.Plugins.AsfGo.getLocalIp();
+        el.textContent = "http://" + (res.ip || "0.0.0.0") + ":1242";
+        return;
+      } catch (e) { /* 回退 */ }
+    }
+    el.textContent = "http://127.0.0.1:1242";
+  }
 
   /* ─── Toast ─── */
   var toastTimer = null;

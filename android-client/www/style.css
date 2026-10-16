@@ -784,3 +784,19 @@ body {
   border-radius: 12px;
   margin: 8px 0;
 }
+
+/* ═══ 表单 select 与大型弹窗 ═══ */
+.field select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+.field select:focus { border-color: var(--secondary); }
+.field option { background: var(--surface); color: var(--text); }
+.modal-lg { max-height: 85vh; overflow-y: auto; }
