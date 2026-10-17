@@ -2,6 +2,8 @@
   "use strict";
 
   var serviceRunning = false;
+  var editingBotName = "";
+  var editingBotConfig = null;
 
   /* ─── 页面切换 ─── */
   window.switchPage = function (page) {
@@ -248,8 +250,8 @@
   function renderBotRows(names, bots) {
     var container = document.querySelector("#page-web .bots-body");
     if (!container) return;
-    // 移除旧的动态行（保留 summary 和添加按钮）
-    container.querySelectorAll(".bot-row, .bot-detail").forEach(function (el) { el.remove(); });
+    // 移除旧的动态行和空态提示（保留 summary 和添加按钮）
+    container.querySelectorAll(".bot-row, .bot-detail, .empty-tip").forEach(function (el) { el.remove(); });
     if (names.length === 0) {
       var empty = document.createElement("div");
       empty.className = "empty-tip";
@@ -281,7 +283,8 @@
       detail.innerHTML =
         '<div class="detail-row"><span>SteamID</span><span class="mono">' + (b.s_SteamID || "—") + '</span></div>' +
         '<div class="detail-row"><span>挂机中</span><span>' + (farming ? "是" : "否") + '</span></div>' +
-        '<div class="detail-row"><span>KeepRunning</span><span>' + (b.KeepRunning ? "是" : "否") + '</span></div>';
+        '<div class="detail-row"><span>KeepRunning</span><span>' + (b.KeepRunning ? "是" : "否") + '</span></div>' +
+        '<div class="detail-actions"><button onclick="editBot(\'' + name + '\')">编辑配置</button></div>';
       container.insertBefore(row, container.querySelector(".add-bot"));
       container.insertBefore(detail, container.querySelector(".add-bot"));
     });
@@ -406,13 +409,66 @@
 
   /* ─── 添加机器人 ─── */
   window.showAddBot = function () {
+    editingBotName = "";
+    var title = document.getElementById("addbot-title");
+    var sub = document.getElementById("addbot-sub");
+    if (title) title.textContent = "添加机器人";
+    if (sub) sub.textContent = "填写机器人配置，将调用 asf-go IPC 创建新 Bot。";
     document.getElementById("addbot-modal").classList.remove("hidden");
     var input = document.getElementById("new-bot-name");
-    if (input) input.focus();
+    if (input) { input.disabled = false; input.focus(); }
   };
   window.hideAddBot = function () {
+    editingBotName = "";
+    editingBotConfig = null;
     document.getElementById("addbot-modal").classList.add("hidden");
   };
+
+  /* 编辑机器人配置：读取现有配置并预填表单 */
+  window.editBot = async function (name) {
+    if (!serviceRunning) { toastMsg("请先启动服务"); return; }
+    try {
+      var data = await fetchAsf("/api/bot/" + encodeURIComponent(name));
+      var bc = data.Result && data.Result.BotConfig ? data.Result.BotConfig : {};
+      editingBotName = name;
+      editingBotConfig = bc;
+      var title = document.getElementById("addbot-title");
+      var sub = document.getElementById("addbot-sub");
+      if (title) title.textContent = "编辑机器人";
+      if (sub) sub.textContent = '修改 "' + name + '" 的配置，保存后将调用 asf-go IPC 更新。';
+      var nameInput = document.getElementById("new-bot-name");
+      if (nameInput) { nameInput.value = name; nameInput.disabled = true; }
+      setChecked("cfg-enabled", bc.Enabled !== false);
+      setVal("cfg-login", bc.SteamLogin || "");
+      setVal("cfg-password", bc.SteamPassword || "");
+      setSelect("cfg-online-status", bc.OnlineStatus || "Online");
+      setSelect("cfg-remote-comm", bc.RemoteCommunication || "All");
+      setVal("cfg-hours", bc.HoursUntilCardDrops != null ? String(bc.HoursUntilCardDrops) : "3");
+      setVal("cfg-custom-game", bc.CustomGamePlayedWhileFarming || "");
+      setChecked("cfg-trading", bc.Trading !== false);
+      setVal("cfg-trading-level", bc.TradingSteamLevel != null ? String(bc.TradingSteamLevel) : "5");
+      setVal("cfg-trade-check", bc.TradeCheckPeriod != null ? String(bc.TradeCheckPeriod) : "60");
+      setSelect("cfg-trading-prefs", bc.TradingPreferences != null ? String(bc.TradingPreferences) : "0");
+      setVal("cfg-parental", bc.SteamParentalCode || "");
+      setVal("cfg-clan", bc.SteamMasterClanID ? String(bc.SteamMasterClanID) : "0");
+      setChecked("cfg-use-login-keys", bc.UseLoginKeys !== false);
+      document.getElementById("addbot-modal").classList.remove("hidden");
+    } catch (e) {
+      toastMsg("读取机器人配置失败: " + e.message);
+    }
+  };
+
+  function setChecked(id, v) {
+    var el = document.getElementById(id);
+    if (el) el.checked = !!v;
+  }
+  function setSelect(id, v) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    for (var i = 0; i < el.options.length; i++) {
+      if (el.options[i].value === String(v)) { el.selectedIndex = i; return; }
+    }
+  }
   function val(id) {
     var el = document.getElementById(id);
     return el ? el.value.trim() : "";
@@ -424,7 +480,7 @@
 
   window.confirmAddBot = async function () {
     var input = document.getElementById("new-bot-name");
-    var name = input ? input.value.trim() : "";
+    var name = editingBotName || (input ? input.value.trim() : "");
     if (!name) { toastMsg("请输入机器人名称"); return; }
     if (!serviceRunning) { toastMsg("请先启动服务"); return; }
     var botConfig = {
@@ -445,6 +501,11 @@
       SteamMasterClanID: parseInt(val("cfg-clan") || "0", 10) || 0,
       UseLoginKeys: checked("cfg-use-login-keys")
     };
+    // 编辑模式下密码留空则保留原密码（避免覆盖加密值）
+    if (!botConfig.SteamPassword && editingBotConfig && editingBotConfig.SteamPassword) {
+      botConfig.SteamPassword = editingBotConfig.SteamPassword;
+      botConfig.PasswordFormat = editingBotConfig.PasswordFormat || "PlainText";
+    }
     try {
       var data = await fetchAsf("/api/bot/" + encodeURIComponent(name), {
         method: "POST",
@@ -452,13 +513,13 @@
         body: JSON.stringify({ botConfig: botConfig })
       });
       if (data.Success) {
-        toastMsg("已创建机器人 " + name);
-        addLog("INFO", "已创建机器人 " + name);
+        toastMsg(editingBotName ? "已更新机器人 " + name : "已创建机器人 " + name);
+        addLog("INFO", (editingBotName ? "已更新机器人 " : "已创建机器人 ") + name);
         if (input) input.value = "";
         hideAddBot();
         refreshStatus();
       } else {
-        toastMsg("创建失败: " + (data.Message || "未知错误"));
+        toastMsg((editingBotName ? "更新失败" : "创建失败") + ": " + (data.Message || "未知错误"));
       }
     } catch (e) {
       toastMsg("创建失败: " + e.message);

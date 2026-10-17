@@ -324,8 +324,8 @@
   <!-- 添加机器人弹窗 -->
   <div class="modal-mask hidden" id="addbot-modal" onclick="if(event.target===this)hideAddBot()">
     <div class="modal modal-lg">
-      <h2>添加机器人</h2>
-      <p class="dim">填写机器人配置，将调用 asf-go IPC 创建新 Bot。</p>
+      <h2 id="addbot-title">添加机器人</h2>
+      <p class="dim" id="addbot-sub">填写机器人配置，将调用 asf-go IPC 创建新 Bot。</p>
 
       <div class="field" style="margin-top:14px">
         <label>机器人名称</label>
