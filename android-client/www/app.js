@@ -280,11 +280,14 @@
       var detail = document.createElement("div");
       detail.className = "bot-detail hidden";
       detail.id = "detail-" + name;
+      var qrBtn = (b.RequiredInput === 8 || b.QrChallengeURL)
+        ? '<button onclick="qrLogin(\'' + name + '\')">扫码登录</button>'
+        : '';
       detail.innerHTML =
         '<div class="detail-row"><span>SteamID</span><span class="mono">' + (b.s_SteamID || "—") + '</span></div>' +
         '<div class="detail-row"><span>挂机中</span><span>' + (farming ? "是" : "否") + '</span></div>' +
         '<div class="detail-row"><span>KeepRunning</span><span>' + (b.KeepRunning ? "是" : "否") + '</span></div>' +
-        '<div class="detail-actions"><button onclick="editBot(\'' + name + '\')">编辑配置</button></div>';
+        '<div class="detail-actions"><button onclick="editBot(\'' + name + '\')">编辑配置</button>' + qrBtn + '</div>';
       container.insertBefore(row, container.querySelector(".add-bot"));
       container.insertBefore(detail, container.querySelector(".add-bot"));
     });
@@ -539,6 +542,47 @@
     }
     el.textContent = "http://127.0.0.1:1242";
   }
+
+  /* ─── QR 扫码登录 ─── */
+  var qrPollTimer = null;
+
+  window.qrLogin = async function (name) {
+    if (!serviceRunning) { toastMsg("请先启动服务"); return; }
+    var img = document.getElementById("qr-image");
+    if (img) img.src = "";
+    document.getElementById("qr-modal").classList.remove("hidden");
+    try {
+      var resp = await fetch(getBase() + "/api/bot/" + encodeURIComponent(name) + "/qrcode", {
+        headers: { "Authentication": getAuth() }
+      });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var blob = await resp.blob();
+      var url = URL.createObjectURL(blob);
+      if (img) img.src = url;
+      if (qrPollTimer) clearInterval(qrPollTimer);
+      qrPollTimer = setInterval(async function () {
+        try {
+          var data = await fetchAsf("/api/asf");
+          var bots = data.Result && data.Result.Bots ? data.Result.Bots : {};
+          var b = bots[name];
+          if (b && b.IsConnectedAndLoggedOn) {
+            clearInterval(qrPollTimer);
+            qrPollTimer = null;
+            toastMsg("机器人 " + name + " 登录成功");
+            hideQrLogin();
+            refreshStatus();
+          }
+        } catch (e) { /* 继续轮询 */ }
+      }, 3000);
+    } catch (e) {
+      toastMsg("获取二维码失败: " + e.message);
+    }
+  };
+
+  window.hideQrLogin = function () {
+    document.getElementById("qr-modal").classList.add("hidden");
+    if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer = null; }
+  };
 
   /* ─── Toast ─── */
   var toastTimer = null;

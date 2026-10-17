@@ -321,6 +321,20 @@
       </nav>
   </main>
 
+  <!-- QR 扫码登录弹窗 -->
+  <div class="modal-mask hidden" id="qr-modal" onclick="if(event.target===this)hideQrLogin()">
+    <div class="modal">
+      <h2>QR 扫码登录</h2>
+      <p class="dim">用 Steam 手机 App 扫描下方二维码完成登录</p>
+      <div style="text-align:center; padding:16px 0;">
+        <img id="qr-image" style="width:220px;height:220px;border-radius:12px;background:#fff;" alt="QR Code">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="hideQrLogin()">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 添加机器人弹窗 -->
   <div class="modal-mask hidden" id="addbot-modal" onclick="if(event.target===this)hideAddBot()">
     <div class="modal modal-lg">

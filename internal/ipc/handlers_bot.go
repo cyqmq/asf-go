@@ -12,6 +12,7 @@ import (
 	"github.com/asf-go/asf/internal/bot"
 	"github.com/asf-go/asf/internal/config"
 	"github.com/asf-go/asf/internal/store"
+	"github.com/skip2/go-qrcode"
 )
 
 func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +140,19 @@ func (s *Server) handleBot(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Message": "已开始挂机"})
 		case "get status":
 			writeJSON(w, http.StatusOK, map[string]any{"Success": true, "Result": botStatusMap(b)})
+		case "get qrcode":
+			qrURL := b.QRChallengeURL()
+			if qrURL == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"Success": false, "Message": "该 Bot 未处于 QR 扫码登录状态"})
+				return
+			}
+			png, err := qrcode.Encode(qrURL, qrcode.Medium, 256)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"Success": false, "Message": err.Error()})
+				return
+			}
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(png)
 		case "get twofactorauthentication/confirmations":
 			confirmations, err := b.GetConfirmations()
 			if err != nil {
